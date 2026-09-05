@@ -1,0 +1,49 @@
+# ============================================
+# Backend web (Render)
+# ============================================
+fastapi
+uvicorn[standard]
+python-multipart          # necesario para subir archivos PDF desde el backoffice
+
+# ============================================
+# Base de datos - Neon (PostgreSQL)
+# ============================================
+psycopg2-binary           # driver de conexion a Neon/PostgreSQL
+sqlalchemy                # capa de queries/ORM sobre Neon
+
+# ============================================
+# Conexion a SAP B1 (SQL Server) - solo corre en tu PC via VPN
+# ============================================
+pyodbc
+
+# ============================================
+# Procesamiento de datos
+# ============================================
+pandas
+python-dateutil
+openpyxl                  # lectura/escritura de Excel
+xlrd                      # lectura de Excel legado (.xls)
+
+# ============================================
+# Extraccion de PDF (estados de cuenta bancarios)
+# ============================================
+pdfplumber                # extraccion de tablas y texto por posicion (BHD y Popular)
+pypdf                     # utilidades generales de PDF
+
+# ============================================
+# Autenticacion / roles (Admin, Ejecutivo, Contabilidad)
+# ============================================
+python-jose[cryptography] # tokens JWT de sesion
+passlib[bcrypt]           # hash de contrasenas
+
+# ============================================
+# Configuracion / entorno
+# ============================================
+python-dotenv
+
+# ============================================
+# Consumo de tasa de cambio BCRD (si exponen API/RSS) y scraping de respaldo
+# ============================================
+requests
+beautifulsoup4
+lxml
