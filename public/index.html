@@ -84,6 +84,13 @@
   .alert.warning { background: var(--amber-dim); border: 0.5px solid rgba(201,168,76,0.2); color: var(--amber); }
 
   .empty { color: var(--text3); font-size: 12.5px; padding: 16px 0; }
+
+  .confiabilidad { margin-bottom: 20px; }
+  .confiabilidad-bar { height: 8px; background: var(--bg3); border-radius: 4px; overflow: hidden; margin-top: 8px; }
+  .confiabilidad-fill { height: 100%; background: #4caf7a; transition: width .3s; }
+  .confiabilidad-fill.warn { background: var(--amber); }
+  .confiabilidad-fill.danger { background: var(--red); }
+  .confiabilidad-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text2); }
 </style>
 </head>
 <body>
@@ -117,6 +124,14 @@
       <p>Entradas y salidas confirmadas, por cuenta y por período.</p>
     </div>
     <select id="periodo"></select>
+  </div>
+
+  <div class="card confiabilidad">
+    <div class="confiabilidad-label">
+      <span>Confiabilidad del dato — % de movimientos confirmados este período</span>
+      <span id="confiabilidad-pct">—</span>
+    </div>
+    <div class="confiabilidad-bar"><div class="confiabilidad-fill" id="confiabilidad-fill" style="width:0%"></div></div>
   </div>
 
   <div id="alerta-conciliar"></div>
@@ -159,6 +174,16 @@
     </table>
   </div>
 
+  <div class="card">
+    <h3>Tendencia mensual por cuenta</h3>
+    <table>
+      <thead>
+        <tr><th>Mes</th><th>Cuenta</th><th class="num">Entradas</th><th class="num">Salidas</th><th class="num">Neto</th></tr>
+      </thead>
+      <tbody id="tabla-tendencia"><tr><td colspan="5" class="empty">Cargando…</td></tr></tbody>
+    </table>
+  </div>
+
 </main>
 </div>
 
@@ -168,6 +193,7 @@ if (!token) window.location.href = '/login.html';
 const headers = { 'Authorization': `Bearer ${token}` };
 
 function formatearMonto(valor, moneda) {
+  if (valor === null || valor === undefined) return 'Falta tasa BCRD';
   const signo = valor < 0 ? '-' : '';
   const simbolo = moneda === 'USD' ? 'US$' : 'RD$';
   return `${signo}${simbolo} ${Math.abs(valor).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`;
@@ -189,6 +215,12 @@ async function cargarFlujo(periodo) {
   document.getElementById('kpi-entradas').textContent = formatearMonto(data.total_entradas_rd, 'RD$');
   document.getElementById('kpi-salidas').textContent = formatearMonto(data.total_salidas_rd, 'RD$');
   document.getElementById('kpi-conciliar').textContent = formatearMonto(data.total_por_conciliar_rd, 'RD$');
+
+  const pct = data.porcentaje_confirmado;
+  document.getElementById('confiabilidad-pct').textContent = `${pct}% confirmado`;
+  const fill = document.getElementById('confiabilidad-fill');
+  fill.style.width = `${pct}%`;
+  fill.className = 'confiabilidad-fill' + (pct < 80 ? ' danger' : pct < 95 ? ' warn' : '');
 
   const alertaBox = document.getElementById('alerta-conciliar');
   alertaBox.innerHTML = data.items_por_conciliar > 0
@@ -219,7 +251,24 @@ async function cargarFlujo(periodo) {
     : '<tr><td colspan="4" class="empty">Ninguno este período.</td></tr>';
 }
 
+async function cargarTendencia() {
+  const res = await fetch('/api/flujo-caja/tendencia', { headers });
+  const data = await res.json();
+  const tbody = document.getElementById('tabla-tendencia');
+  tbody.innerHTML = data.length
+    ? data.map(t => `
+        <tr>
+          <td class="strong">${t.etiqueta}</td>
+          <td>${t.alias}</td>
+          <td class="num strong">${formatearMonto(t.entradas, t.moneda)}</td>
+          <td class="num strong">${formatearMonto(t.salidas, t.moneda)}</td>
+          <td class="num strong">${formatearMonto(t.neto, t.moneda)}</td>
+        </tr>`).join('')
+    : '<tr><td colspan="5" class="empty">Sin datos confirmados todavía.</td></tr>';
+}
+
 cargarPeriodos();
+cargarTendencia();
 </script>
 </body>
 </html>

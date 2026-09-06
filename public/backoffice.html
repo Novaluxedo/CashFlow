@@ -106,6 +106,8 @@
   .upload-item .status.err { color: var(--red); }
   .upload-item .status.warn { color: var(--amber); }
   .upload-item .status.pending { color: var(--text2); }
+  .status.ok { color: #4caf7a; }
+  .status.err { color: var(--red); }
 
   .empty { color: var(--text3); font-size: 12.5px; padding: 16px 0; }
 </style>
@@ -131,6 +133,10 @@
     <span class="nav-label">Extractos</span>
     <button class="nav-item" data-panel="extractos" onclick="mostrarPanel(this)">Cargar extractos</button>
     <button class="nav-item" data-panel="conciliacion" onclick="mostrarPanel(this)">Por conciliar</button>
+  </div>
+  <div class="nav-section">
+    <span class="nav-label">SAP B1</span>
+    <button class="nav-item" data-panel="validacion" onclick="mostrarPanel(this)">Validación SAP vs Banco</button>
   </div>
   <div class="nav-section">
     <span class="nav-label">Otros</span>
@@ -206,6 +212,12 @@
         <tbody id="tabla-conciliacion"><tr><td colspan="7" class="empty">Cargando…</td></tr></tbody>
       </table>
     </div>
+  </div>
+
+  <!-- ===================== VALIDACION SAP VS BANCO ===================== -->
+  <div class="panel" id="panel-validacion">
+    <div class="hero"><h1>Validación SAP vs Banco</h1><p>Compara cobros/pagos de SAP contra lo confirmado en cada extracto bancario.</p></div>
+    <div id="validacion-contenido"><p class="empty">Cargando…</p></div>
   </div>
 
 </main>
@@ -368,10 +380,60 @@ async function reclasificar(id, sugerido) {
   cargarConciliacion();
 }
 
+// ---------- Validación SAP vs Banco ----------
+function formatoMonto(n) {
+  return Number(n).toLocaleString('es-DO', { minimumFractionDigits: 2 });
+}
+
+function filaComparacion(titulo, lado) {
+  const diffClass = Math.abs(lado.diferencia) < 0.01 ? 'ok' : 'err';
+  const sinMatchSap = lado.sap_sin_match.map(d =>
+    `<div class="upload-item"><span>Doc ${d.doc_entry} · ${d.fecha}</span><span class="strong">${formatoMonto(d.monto)}</span></div>`
+  ).join('');
+  const sinMatchBanco = lado.banco_sin_match.map(m =>
+    `<div class="upload-item"><span>${m.fecha} · ${m.descripcion || ''}</span><span class="strong">${formatoMonto(m.monto)}</span></div>`
+  ).join('');
+
+  return `
+    <div style="margin-top:16px">
+      <h3 style="font-size:13px">${titulo}</h3>
+      <table>
+        <tbody>
+          <tr><td>SAP</td><td class="num strong">${formatoMonto(lado.total_sap)}</td><td>${lado.documentos_sap} documentos</td></tr>
+          <tr><td>Banco (confirmado)</td><td class="num strong">${formatoMonto(lado.total_banco)}</td><td>${lado.movimientos_banco} movimientos</td></tr>
+          <tr><td>Diferencia</td><td class="num strong status ${diffClass}" style="display:table-cell">${formatoMonto(lado.diferencia)}</td><td>${lado.emparejados} emparejados</td></tr>
+        </tbody>
+      </table>
+      ${sinMatchSap ? `<p style="font-size:11.5px;color:var(--amber);margin-top:10px">⚠ En SAP sin movimiento bancario (${lado.sap_sin_match.length}):</p>${sinMatchSap}` : ''}
+      ${sinMatchBanco ? `<p style="font-size:11.5px;color:var(--amber);margin-top:10px">⚠ Confirmado en banco sin documento SAP (${lado.banco_sin_match.length}):</p>${sinMatchBanco}` : ''}
+    </div>
+  `;
+}
+
+async function cargarValidacion() {
+  const contenedor = document.getElementById('validacion-contenido');
+  const res = await fetch('/api/validacion', { headers });
+  const data = await res.json();
+
+  if (!data.length) {
+    contenedor.innerHTML = '<p class="empty">Ninguna cuenta tiene un código de SAP vinculado todavía (sap_acct_code).</p>';
+    return;
+  }
+
+  contenedor.innerHTML = data.map(cuenta => `
+    <div class="card">
+      <h3>${cuenta.alias} <span style="color:var(--text3);font-weight:400">— SAP ${cuenta.sap_acct_code} · ${cuenta.moneda}</span></h3>
+      ${filaComparacion('Cobros (entradas)', cuenta.cobros)}
+      ${filaComparacion('Pagos (salidas)', cuenta.pagos)}
+    </div>
+  `).join('');
+}
+
 // ---------- Init ----------
 cargarBancos();
 cargarCuentas();
 cargarConciliacion();
+cargarValidacion();
 </script>
 </body>
 </html>
