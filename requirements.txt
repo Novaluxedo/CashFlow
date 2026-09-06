@@ -35,6 +35,7 @@ pypdf                     # utilidades generales de PDF
 # ============================================
 python-jose[cryptography] # tokens JWT de sesion
 passlib[bcrypt]           # hash de contrasenas
+bcrypt==4.0.1              # fijado: passlib se rompe con bcrypt 4.1+ (falta __about__.__version__)
 
 # ============================================
 # Configuracion / entorno

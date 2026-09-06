@@ -66,19 +66,21 @@ def pagina_backoffice():
     return FileResponse("public/backoffice.html")
 
 
-# Sirve cualquier otro archivo estatico dentro de public/ (por si se agregan
-# imagenes, css o js sueltos mas adelante). Va al final para no tapar las
-# rutas /api/* que se agregan con los routers.
-app.mount("/", StaticFiles(directory="public"), name="public")
-
-
 # ------------------------------------------------------------------
-# Routers - se van descomentando a medida que se escriben
+# Routers - IMPORTANTE: siempre van antes del app.mount("/", ...) de abajo.
+# Un Mount en "/" intercepta cualquier ruta que no se haya registrado todavia,
+# asi que si un router se agrega despues del mount, sus endpoints nunca se alcanzan.
 # ------------------------------------------------------------------
-# from routers import auth, backoffice, extractos, conciliacion, flujo_caja
-#
-# app.include_router(auth.router)
+from routers import auth  # noqa: E402
+# from routers import backoffice, extractos, conciliacion, flujo_caja
+
+app.include_router(auth.router)
 # app.include_router(backoffice.router)
 # app.include_router(extractos.router)
 # app.include_router(conciliacion.router)
 # app.include_router(flujo_caja.router)
+
+
+# Sirve cualquier otro archivo estatico dentro de public/ (por si se agregan
+# imagenes, css o js sueltos mas adelante). Va al final a proposito.
+app.mount("/", StaticFiles(directory="public"), name="public")
