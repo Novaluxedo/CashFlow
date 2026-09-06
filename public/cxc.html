@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cuentas por Cobrar — Novalum</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --red: #E8293A;
+    --red-dim: rgba(232,41,58,0.12);
+    --gold: #c9a84c;
+    --bg: #0c0c0c;
+    --bg2: #111;
+    --bg3: #161616;
+    --border: #1e1e1e;
+    --border2: #252525;
+    --text: #e0ddd6;
+    --text2: #888;
+    --text3: #444;
+    --green: #2d7a4f;
+    --green-dim: rgba(45,122,79,0.12);
+    --amber: #c9a84c;
+    --amber-dim: rgba(201,168,76,0.1);
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; }
+
+  .layout { display: flex; min-height: 100vh; }
+
+  .sidebar {
+    width: 230px; flex-shrink: 0; background: var(--bg2);
+    border-right: 0.5px solid var(--border); height: 100vh; position: sticky; top: 0; padding: 24px 0;
+  }
+  .sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 0 20px 20px; border-bottom: 0.5px solid var(--border); margin-bottom: 16px; }
+  .sidebar-logo svg { width: 28px; height: 28px; }
+  .logo-name { font-size: 13px; font-weight: 600; color: #fff; }
+  .logo-sub { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; }
+
+  .nav-section { padding: 0 12px; margin-bottom: 4px; }
+  .nav-label { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: .1em; padding: 8px 8px 4px; display: block; }
+  .nav-item {
+    display: flex; align-items: center; gap: 8px; padding: 8px 8px; border-radius: 6px;
+    color: var(--text2); text-decoration: none; font-size: 13px; cursor: pointer; border: none; background: none; width: 100%; text-align: left;
+  }
+  .nav-item:hover { background: var(--bg3); color: var(--text); }
+  .nav-item.active { background: var(--red-dim); color: var(--red); }
+
+  .main { flex: 1; padding: 40px; max-width: 1100px; }
+  .hero { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 28px; flex-wrap: wrap; gap: 16px; }
+  .hero h1 { font-size: 26px; font-weight: 300; color: #fff; }
+  .hero p { font-size: 13px; color: var(--text2); margin-top: 4px; }
+
+  select, input[type="text"], input[type="number"] {
+    background: var(--bg3); border: 0.5px solid var(--border2); border-radius: 7px;
+    padding: 9px 12px; color: var(--text); font-family: var(--sans); font-size: 13px;
+  }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 28px; }
+  .kpi-card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+  .kpi-label { font-size: 10.5px; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+  .kpi-value { font-size: 22px; font-weight: 500; font-family: var(--mono); }
+  .kpi-value.pos { color: #4caf7a; }
+  .kpi-value.neg { color: var(--red); }
+  .kpi-value.warn { color: var(--amber); }
+  .kpi-sub { font-size: 11px; color: var(--text2); margin-top: 6px; }
+
+  .card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+  .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
+  .card h3 { font-size: 14px; font-weight: 500; color: #fff; }
+  .card-filters { display: flex; gap: 8px; align-items: center; }
+  .card-filters label { font-size: 11px; color: var(--text2); }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .07em; text-align: left; padding: 8px 10px; border-bottom: 0.5px solid var(--border); }
+  th.num, td.num { text-align: right; }
+  td { padding: 9px 10px; border-bottom: 0.5px solid var(--bg3); font-size: 12.5px; color: var(--text2); }
+  td.strong { color: var(--text); font-family: var(--mono); }
+  tr:last-child td { border-bottom: none; }
+  tr.total td { border-top: 0.5px solid var(--border2); font-weight: 500; color: #fff; }
+  tr.clickable { cursor: pointer; }
+  tr.clickable:hover td { background: var(--bg3); }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10.5px; font-family: var(--mono); }
+  .badge.danger { background: var(--red-dim); color: var(--red); }
+  .badge.warn { background: var(--amber-dim); color: var(--amber); }
+  .badge.ok { background: var(--green-dim); color: #4caf7a; }
+
+  .empty { color: var(--text3); font-size: 12.5px; padding: 16px 0; }
+  .nota { font-size: 11.5px; color: var(--text3); margin-top: 10px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <svg viewBox="0 0 100 100" fill="none">
+      <polygon points="10,80 10,25 38,40 38,80" fill="#E8293A"/>
+      <polygon points="38,40 62,25 62,65 38,80" fill="#c0202e"/>
+      <polygon points="62,25 90,15 90,70 62,65" fill="#E8293A"/>
+    </svg>
+    <div><div class="logo-name">novalum</div><div class="logo-sub">Flujo de efectivo</div></div>
+  </div>
+
+  <div class="nav-section">
+    <span class="nav-label">Reporte</span>
+    <a class="nav-item" href="/index.html">Flujo de caja</a>
+    <a class="nav-item active" href="/cxc.html">Cuentas por cobrar</a>
+  </div>
+  <div class="nav-section">
+    <span class="nav-label">Administración</span>
+    <a class="nav-item" href="/backoffice.html">Backoffice</a>
+  </div>
+</nav>
+
+<main class="main">
+
+  <div class="hero">
+    <div>
+      <h1>Cuentas por cobrar</h1>
+      <p>Saldo abierto por factura y seguimiento de Ventas vs. Cobros por cliente — todo en USD.</p>
+    </div>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-label">Saldo abierto total</div>
+      <div class="kpi-value warn" id="kpi-saldo-total">—</div>
+      <div class="kpi-sub"><span id="kpi-facturas-abiertas">—</span> facturas sin cobrar completo</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Clientes con saldo abierto</div>
+      <div class="kpi-value" id="kpi-clientes-count">—</div>
+      <div class="kpi-sub">ver concentración en la tabla de abajo</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Factura más antigua sin cobrar</div>
+      <div class="kpi-value neg" id="kpi-dias-max">—</div>
+      <div class="kpi-sub">días abiertos</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h3>Concentración de saldo abierto por cliente</h3>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Cliente</th><th class="num">Facturas abiertas</th><th class="num">Saldo abierto (USD)</th><th class="num">Más antiguo (días)</th></tr>
+      </thead>
+      <tbody id="tabla-clientes"><tr><td colspan="4" class="empty">Cargando…</td></tr></tbody>
+    </table>
+    <p class="nota">Clic en un cliente para ver el detalle de sus facturas abiertas abajo.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h3>Antigüedad de saldos — detalle por factura</h3>
+      <div class="card-filters">
+        <label for="filtro-cliente">Cliente:</label>
+        <input type="text" id="filtro-cliente" placeholder="Todos" style="width:110px">
+        <label for="filtro-dias">Mín. días abiertos:</label>
+        <input type="number" id="filtro-dias" value="0" min="0" style="width:70px">
+        <button class="nav-item" style="width:auto;background:var(--bg3);border:0.5px solid var(--border2)" onclick="cargarSaldoAbierto()">Filtrar</button>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr><th>Cliente</th><th>Factura</th><th>Fecha venta</th><th class="num">Venta original</th><th class="num">Saldo abierto</th><th class="num">Días abierto</th></tr>
+      </thead>
+      <tbody id="tabla-facturas"><tr><td colspan="6" class="empty">Cargando…</td></tr></tbody>
+    </table>
+    <p class="nota">saldo_abierto viene directo de JDT1.BalDueDeb, mantenido automáticamente por el motor de reconciliación de SAP — no es un cálculo nuestro.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <h3>Seguimiento — Ventas vs. Cobros por cliente y mes (USD)</h3>
+      <div class="card-filters">
+        <label for="filtro-periodo">Período:</label>
+        <select id="filtro-periodo">
+          <option value="">Todos los meses</option>
+        </select>
+      </div>
+    </div>
+    <div id="alerta-seguimiento"></div>
+    <table>
+      <thead>
+        <tr><th>Período</th><th>Cliente</th><th class="num">Ventas (USD)</th><th class="num">Cobros (USD)</th><th class="num">Variación neta</th></tr>
+      </thead>
+      <tbody id="tabla-seguimiento"><tr><td colspan="5" class="empty">Cargando…</td></tr></tbody>
+    </table>
+    <p class="nota">
+      Ventas viene de JDT1.Debit en la cuenta de CxC (siempre USD, confirmado). Cobros viene de la tabla `cobros`
+      convertida a USD con la tasa real que usó SAP en cada cobro (ORCT.DocRate) — nunca con una tasa BCRD.
+      Variación positiva = el mes vendió más de lo que cobró (creció CxC). Negativa = se cobró cartera vieja.
+      Si un cliente/mes se ve fuera de lo normal, investigarlo puntual contra JDT1 (Account='1140101' AND ShortName=cliente).
+    </p>
+  </div>
+
+</main>
+</div>
+
+<script>
+const token = localStorage.getItem('token');
+if (!token) window.location.href = '/login.html';
+const headers = { 'Authorization': `Bearer ${token}` };
+
+function formatearUSD(valor) {
+  if (valor === null || valor === undefined) return '—';
+  const signo = valor < 0 ? '-' : '';
+  return `${signo}US$ ${Math.abs(valor).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`;
+}
+
+function badgeDias(dias) {
+  const clase = dias > 90 ? 'danger' : dias > 30 ? 'warn' : 'ok';
+  return `<span class="badge ${clase}">${dias}d</span>`;
+}
+
+// ---------- Concentración por cliente ----------
+async function cargarResumenClientes() {
+  const res = await fetch('/api/cxc/saldo-abierto/resumen-por-cliente', { headers });
+  const data = await res.json();
+
+  const totalSaldo = data.reduce((acc, c) => acc + c.saldo_abierto_usd, 0);
+  const totalFacturas = data.reduce((acc, c) => acc + c.facturas_abiertas, 0);
+  const diasMax = data.length ? Math.max(...data.map(c => c.dias_mas_antiguo)) : 0;
+
+  document.getElementById('kpi-saldo-total').textContent = formatearUSD(totalSaldo);
+  document.getElementById('kpi-facturas-abiertas').textContent = totalFacturas;
+  document.getElementById('kpi-clientes-count').textContent = data.length;
+  document.getElementById('kpi-dias-max').textContent = diasMax;
+
+  const tbody = document.getElementById('tabla-clientes');
+  tbody.innerHTML = data.length
+    ? data.map(c => `
+        <tr class="clickable" onclick="filtrarPorCliente('${c.cliente_code}')">
+          <td class="strong">${c.cliente_code}</td>
+          <td class="num strong">${c.facturas_abiertas}</td>
+          <td class="num strong">${formatearUSD(c.saldo_abierto_usd)}</td>
+          <td class="num">${badgeDias(c.dias_mas_antiguo)}</td>
+        </tr>`).join('')
+    : '<tr><td colspan="4" class="empty">Sin saldo abierto — toda la cartera está al día.</td></tr>';
+}
+
+function filtrarPorCliente(codigo) {
+  document.getElementById('filtro-cliente').value = codigo;
+  cargarSaldoAbierto();
+  document.getElementById('filtro-periodo-cliente-oculto') // no-op, placeholder para futura sincronizacion con seguimiento
+}
+
+// ---------- Detalle de aging por factura ----------
+async function cargarSaldoAbierto() {
+  const cliente = document.getElementById('filtro-cliente').value.trim();
+  const dias = document.getElementById('filtro-dias').value || 0;
+
+  const params = new URLSearchParams();
+  if (cliente) params.set('cliente', cliente);
+  if (dias) params.set('dias_minimo', dias);
+
+  const res = await fetch(`/api/cxc/saldo-abierto?${params.toString()}`, { headers });
+  const data = await res.json();
+
+  const tbody = document.getElementById('tabla-facturas');
+  tbody.innerHTML = data.facturas.length
+    ? data.facturas.map(f => `
+        <tr>
+          <td class="strong">${f.cliente_code}</td>
+          <td>${f.doc_num ?? f.doc_entry}</td>
+          <td>${f.fecha_venta}</td>
+          <td class="num strong">${formatearUSD(f.venta_original_usd)}</td>
+          <td class="num strong">${formatearUSD(f.saldo_abierto_usd)}</td>
+          <td class="num">${badgeDias(f.dias_abierto)}</td>
+        </tr>`).join('')
+    : '<tr><td colspan="6" class="empty">Sin facturas abiertas con estos filtros.</td></tr>';
+}
+
+// ---------- Seguimiento Ventas vs Cobros ----------
+async function cargarSeguimiento() {
+  const periodo = document.getElementById('filtro-periodo').value;
+  const params = new URLSearchParams();
+  if (periodo) params.set('periodo', periodo);
+
+  const res = await fetch(`/api/cxc/seguimiento?${params.toString()}`, { headers });
+  const data = await res.json();
+
+  const alertaBox = document.getElementById('alerta-seguimiento');
+  alertaBox.innerHTML = data.advertencia
+    ? `<div class="badge warn" style="display:block;padding:10px 12px;margin-bottom:14px;border-radius:8px">⚠ ${data.advertencia}</div>`
+    : '';
+
+  // Poblar el selector de periodos la primera vez, a partir de los datos ya traidos
+  const select = document.getElementById('filtro-periodo');
+  if (select.options.length <= 1) {
+    const periodosUnicos = [...new Set(data.detalle.map(d => d.periodo))].sort().reverse();
+    periodosUnicos.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p; opt.textContent = p;
+      select.appendChild(opt);
+    });
+  }
+
+  const tbody = document.getElementById('tabla-seguimiento');
+  tbody.innerHTML = data.detalle.length
+    ? data.detalle.map(d => `
+        <tr>
+          <td>${d.periodo}</td>
+          <td class="strong">${d.cliente_code}</td>
+          <td class="num strong">${formatearUSD(d.ventas_usd)}</td>
+          <td class="num strong">${formatearUSD(d.cobros_usd)}</td>
+          <td class="num strong" style="color:${d.variacion_neta_usd >= 0 ? 'var(--amber)' : '#4caf7a'}">${formatearUSD(d.variacion_neta_usd)}</td>
+        </tr>`).join('')
+    : '<tr><td colspan="5" class="empty">Sin datos para este filtro.</td></tr>';
+}
+
+document.getElementById('filtro-periodo').addEventListener('change', cargarSeguimiento);
+
+cargarResumenClientes();
+cargarSaldoAbierto();
+cargarSeguimiento();
+</script>
+</body>
+</html>

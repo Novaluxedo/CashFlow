@@ -66,6 +66,11 @@ def pagina_backoffice():
     return FileResponse("public/backoffice.html")
 
 
+@app.get("/cxc.html")
+def pagina_cxc():
+    return FileResponse("public/cxc.html")
+
+
 # ------------------------------------------------------------------
 # Routers - IMPORTANTE: siempre van antes del app.mount("/", ...) de abajo.
 # Un Mount en "/" intercepta cualquier ruta que no se haya registrado todavia,
