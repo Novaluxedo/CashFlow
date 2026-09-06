@@ -85,7 +85,7 @@ def flujo_caja(
                   AND m.estado_conciliacion = 'confirmado'
                   AND m.fecha BETWEEN :inicio AND :fin
             WHERE c.activa = TRUE
-            GROUP BY c.id, alias, c.moneda
+            GROUP BY c.id, c.alias, b.nombre, c.numero_cuenta, c.moneda
             ORDER BY c.moneda, alias
         """),
         {"inicio": inicio, "fin": fin},
@@ -205,7 +205,7 @@ def tendencia_mensual(db: Session = Depends(get_db), usuario: dict = Depends(usu
             JOIN cuentas_bancarias c ON c.id = m.cuenta_id
             JOIN catalogo_bancos b ON b.codigo = c.banco_codigo
             WHERE m.estado_conciliacion = 'confirmado'
-            GROUP BY mes, alias, c.moneda
+            GROUP BY date_trunc('month', m.fecha), c.alias, b.nombre, c.numero_cuenta, c.moneda
             ORDER BY mes ASC
         """)
     ).mappings().all()
