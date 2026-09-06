@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Backoffice — Flujo de Efectivo</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --red: #E8293A;
+    --red-dim: rgba(232,41,58,0.12);
+    --gold: #c9a84c;
+    --bg: #0c0c0c;
+    --bg2: #111;
+    --bg3: #161616;
+    --border: #1e1e1e;
+    --border2: #252525;
+    --text: #e0ddd6;
+    --text2: #888;
+    --text3: #444;
+    --green: #2d7a4f;
+    --green-dim: rgba(45,122,79,0.12);
+    --amber: #c9a84c;
+    --amber-dim: rgba(201,168,76,0.1);
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; }
+
+  .layout { display: flex; min-height: 100vh; }
+
+  .sidebar {
+    width: 230px; flex-shrink: 0; background: var(--bg2);
+    border-right: 0.5px solid var(--border);
+    height: 100vh; position: sticky; top: 0; padding: 24px 0;
+  }
+  .sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 0 20px 20px; border-bottom: 0.5px solid var(--border); margin-bottom: 16px; }
+  .sidebar-logo svg { width: 28px; height: 28px; }
+  .logo-name { font-size: 13px; font-weight: 600; color: #fff; }
+  .logo-sub { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; }
+
+  .nav-section { padding: 0 12px; margin-bottom: 4px; }
+  .nav-label { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: .1em; padding: 8px 8px 4px; display: block; }
+  .nav-item {
+    display: flex; align-items: center; gap: 8px; padding: 8px 8px; border-radius: 6px;
+    color: var(--text2); text-decoration: none; font-size: 13px; cursor: pointer; border: none; background: none; width: 100%; text-align: left;
+  }
+  .nav-item:hover { background: var(--bg3); color: var(--text); }
+  .nav-item.active { background: var(--red-dim); color: var(--red); }
+
+  .main { flex: 1; padding: 40px; max-width: 980px; }
+  .hero { margin-bottom: 32px; }
+  .hero h1 { font-size: 26px; font-weight: 300; color: #fff; }
+  .hero p { font-size: 13px; color: var(--text2); margin-top: 4px; }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+  .card h3 { font-size: 14px; font-weight: 500; color: #fff; margin-bottom: 14px; }
+
+  .form-row { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .form-row > div { flex: 1; min-width: 140px; }
+  label { display: block; font-size: 10.5px; color: var(--text2); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
+  input, select {
+    width: 100%; background: var(--bg3); border: 0.5px solid var(--border2); border-radius: 6px;
+    padding: 9px 10px; color: var(--text); font-family: var(--sans); font-size: 13px; outline: none;
+  }
+  input:focus, select:focus { border-color: var(--red); }
+
+  button.primary {
+    background: var(--red); color: #fff; border: none; border-radius: 6px; padding: 9px 16px;
+    font-size: 13px; font-weight: 500; cursor: pointer;
+  }
+  button.primary:hover { opacity: .9; }
+  button.secondary {
+    background: var(--bg3); color: var(--text); border: 0.5px solid var(--border2); border-radius: 6px;
+    padding: 6px 12px; font-size: 12px; cursor: pointer;
+  }
+  button.secondary:hover { border-color: var(--text2); }
+
+  table { width: 100%; border-collapse: collapse; }
+  th { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .07em; text-align: left; padding: 8px 10px; border-bottom: 0.5px solid var(--border); }
+  td { padding: 9px 10px; border-bottom: 0.5px solid var(--bg3); font-size: 12.5px; color: var(--text2); }
+  td.strong { color: var(--text); font-family: var(--mono); }
+  tr:last-child td { border-bottom: none; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10.5px; }
+  .badge.usd { background: rgba(91,155,213,0.12); color: #5b9bd5; }
+  .badge.rd { background: var(--amber-dim); color: var(--amber); }
+  .badge.pendiente { background: var(--amber-dim); color: var(--amber); }
+
+  .dropzone {
+    border: 1.5px dashed var(--border2); border-radius: 10px; padding: 40px 20px; text-align: center;
+    color: var(--text2); font-size: 13px; cursor: pointer; transition: border-color .15s;
+  }
+  .dropzone.dragover { border-color: var(--red); color: var(--text); }
+  .dropzone input { display: none; }
+
+  .upload-list { margin-top: 14px; }
+  .upload-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 0.5px solid var(--bg3); font-size: 12.5px; }
+  .upload-item .status.ok { color: #4caf7a; }
+  .upload-item .status.err { color: var(--red); }
+  .upload-item .status.pending { color: var(--text2); }
+
+  .empty { color: var(--text3); font-size: 12.5px; padding: 16px 0; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <svg viewBox="0 0 100 100" fill="none">
+      <polygon points="10,80 10,25 38,40 38,80" fill="#E8293A"/>
+      <polygon points="38,40 62,25 62,65 38,80" fill="#c0202e"/>
+      <polygon points="62,25 90,15 90,70 62,65" fill="#E8293A"/>
+    </svg>
+    <div><div class="logo-name">novalum</div><div class="logo-sub">Backoffice</div></div>
+  </div>
+
+  <div class="nav-section">
+    <span class="nav-label">Cuentas</span>
+    <button class="nav-item active" data-panel="cuentas" onclick="mostrarPanel(this)">Cuentas bancarias</button>
+  </div>
+  <div class="nav-section">
+    <span class="nav-label">Extractos</span>
+    <button class="nav-item" data-panel="extractos" onclick="mostrarPanel(this)">Cargar extractos</button>
+    <button class="nav-item" data-panel="conciliacion" onclick="mostrarPanel(this)">Por conciliar</button>
+  </div>
+  <div class="nav-section">
+    <span class="nav-label">Otros</span>
+    <a class="nav-item" href="/index.html">← Volver al dashboard</a>
+  </div>
+</nav>
+
+<main class="main">
+
+  <!-- ===================== CUENTAS BANCARIAS ===================== -->
+  <div class="panel active" id="panel-cuentas">
+    <div class="hero"><h1>Cuentas bancarias</h1><p>Registra cada cuenta antes de subir sus extractos.</p></div>
+
+    <div class="card">
+      <h3>Agregar cuenta</h3>
+      <form id="form-cuenta">
+        <div class="form-row">
+          <div>
+            <label>Banco</label>
+            <select id="banco-select" required>
+              <option value="">Selecciona un banco…</option>
+            </select>
+          </div>
+          <div>
+            <label>Número de cuenta</label>
+            <input type="text" id="numero-cuenta" placeholder="ej. 15469770020" required>
+          </div>
+          <div>
+            <label>Moneda</label>
+            <select id="moneda-select" required>
+              <option value="USD">USD</option>
+              <option value="RD$">RD$</option>
+            </select>
+          </div>
+          <div>
+            <label>Alias (opcional)</label>
+            <input type="text" id="alias" placeholder="ej. BHD USD principal">
+          </div>
+        </div>
+        <button type="submit" class="primary">+ Agregar cuenta</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>Cuentas registradas</h3>
+      <table>
+        <thead><tr><th>Banco</th><th>Número</th><th>Moneda</th><th>Alias</th><th></th></tr></thead>
+        <tbody id="tabla-cuentas"><tr><td colspan="5" class="empty">Cargando…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===================== CARGAR EXTRACTOS ===================== -->
+  <div class="panel" id="panel-extractos">
+    <div class="hero"><h1>Cargar extractos</h1><p>Sube uno o varios PDF a la vez — el sistema identifica la cuenta y el período de cada uno solo.</p></div>
+
+    <div class="card">
+      <div class="dropzone" id="dropzone">
+        <p>Arrastra tus PDF aquí, o haz clic para elegir archivos</p>
+        <input type="file" id="file-input" multiple accept="application/pdf">
+      </div>
+      <div class="upload-list" id="upload-list"></div>
+    </div>
+  </div>
+
+  <!-- ===================== POR CONCILIAR ===================== -->
+  <div class="panel" id="panel-conciliacion">
+    <div class="hero"><h1>Por conciliar</h1><p>Movimientos que no se pudieron clasificar automáticamente.</p></div>
+
+    <div class="card">
+      <table>
+        <thead><tr><th>Fecha</th><th>Cuenta</th><th>Descripción</th><th>Cód.</th><th>Monto</th><th>Sugerencia</th><th></th></tr></thead>
+        <tbody id="tabla-conciliacion"><tr><td colspan="7" class="empty">Cargando…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<script>
+const token = localStorage.getItem('token');
+if (!token) window.location.href = '/login.html';
+
+const headers = { 'Authorization': `Bearer ${token}` };
+
+function mostrarPanel(el) {
+  document.querySelectorAll('.nav-item[data-panel]').forEach(i => i.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-' + el.dataset.panel).classList.add('active');
+}
+
+// ---------- Catálogo de bancos + cuentas ----------
+async function cargarBancos() {
+  const res = await fetch('/api/catalogo-bancos', { headers });
+  const bancos = await res.json();
+  const select = document.getElementById('banco-select');
+  bancos.forEach(b => {
+    const opt = document.createElement('option');
+    opt.value = b.codigo;
+    opt.textContent = b.nombre;
+    select.appendChild(opt);
+  });
+}
+
+async function cargarCuentas() {
+  const res = await fetch('/api/cuentas-bancarias', { headers });
+  const cuentas = await res.json();
+  const tbody = document.getElementById('tabla-cuentas');
+  if (!cuentas.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty">Aún no hay cuentas registradas.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = cuentas.map(c => `
+    <tr>
+      <td class="strong">${c.banco_nombre}</td>
+      <td class="strong">${c.numero_cuenta}</td>
+      <td><span class="badge ${c.moneda === 'USD' ? 'usd' : 'rd'}">${c.moneda}</span></td>
+      <td>${c.alias || '—'}</td>
+      <td><button class="secondary" onclick="desactivarCuenta(${c.id})">Desactivar</button></td>
+    </tr>
+  `).join('');
+}
+
+document.getElementById('form-cuenta').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const body = {
+    banco_codigo: document.getElementById('banco-select').value,
+    numero_cuenta: document.getElementById('numero-cuenta').value.trim(),
+    moneda: document.getElementById('moneda-select').value,
+    alias: document.getElementById('alias').value.trim() || null,
+  };
+  const res = await fetch('/api/cuentas-bancarias', {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (res.ok) {
+    e.target.reset();
+    cargarCuentas();
+  } else {
+    const data = await res.json().catch(() => ({}));
+    alert(data.detail || 'No se pudo agregar la cuenta.');
+  }
+});
+
+async function desactivarCuenta(id) {
+  if (!confirm('¿Desactivar esta cuenta?')) return;
+  await fetch(`/api/cuentas-bancarias/${id}`, { method: 'DELETE', headers });
+  cargarCuentas();
+}
+
+// ---------- Carga de extractos ----------
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('file-input');
+const uploadList = document.getElementById('upload-list');
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  subirArchivos(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', () => subirArchivos(fileInput.files));
+
+async function subirArchivos(files) {
+  for (const file of files) {
+    const row = document.createElement('div');
+    row.className = 'upload-item';
+    row.innerHTML = `<span>${file.name}</span><span class="status pending">Subiendo…</span>`;
+    uploadList.prepend(row);
+
+    const formData = new FormData();
+    formData.append('archivo', file);
+
+    try {
+      const res = await fetch('/api/extractos/upload', { method: 'POST', headers, body: formData });
+      const data = await res.json();
+      if (res.ok) {
+        row.querySelector('.status').className = 'status ok';
+        row.querySelector('.status').textContent =
+          `${data.cuenta} · ${data.periodo_inicio} → ${data.periodo_fin} · ${data.movimientos_nuevos} nuevos, ${data.movimientos_duplicados} ya existían`;
+      } else {
+        row.querySelector('.status').className = 'status err';
+        row.querySelector('.status').textContent = data.detail || 'Error al procesar';
+      }
+    } catch {
+      row.querySelector('.status').className = 'status err';
+      row.querySelector('.status').textContent = 'Error de conexión';
+    }
+  }
+}
+
+// ---------- Por conciliar ----------
+async function cargarConciliacion() {
+  const res = await fetch('/api/conciliacion?estado=por_conciliar', { headers });
+  const items = await res.json();
+  const tbody = document.getElementById('tabla-conciliacion');
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">No hay movimientos pendientes 🎉</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map(m => `
+    <tr>
+      <td>${m.fecha}</td>
+      <td class="strong">${m.cuenta_alias}</td>
+      <td>${m.descripcion}</td>
+      <td class="strong">${m.codigo_movimiento || '—'}</td>
+      <td class="strong">${m.moneda} ${(m.credito || m.debito).toLocaleString()}</td>
+      <td>${m.sugerencia_auto ? `<span class="badge pendiente">${m.sugerencia_auto}</span>` : '—'}</td>
+      <td><button class="secondary" onclick="reclasificar(${m.id}, '${m.sugerencia_auto || ''}')">Reclasificar</button></td>
+    </tr>
+  `).join('');
+}
+
+async function reclasificar(id, sugerido) {
+  const opciones = ['confirmado', 'transferencia_interna', 'conversion_divisas'];
+  const elegido = prompt(`Clasificar como (${opciones.join(' / ')}):`, sugerido || 'confirmado');
+  if (!elegido || !opciones.includes(elegido)) return;
+  const nota = prompt('Nota (opcional):', '') || '';
+  await fetch(`/api/conciliacion/${id}/resolver`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ estado_conciliacion: elegido, nota_resolucion: nota }),
+  });
+  cargarConciliacion();
+}
+
+// ---------- Init ----------
+cargarBancos();
+cargarCuentas();
+cargarConciliacion();
+</script>
+</body>
+</html>

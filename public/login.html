@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flujo de Efectivo — Acceso</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --red: #E8293A;
+    --red-dim: rgba(232,41,58,0.12);
+    --gold: #c9a84c;
+    --bg: #0c0c0c;
+    --bg2: #111;
+    --bg3: #161616;
+    --border: #1e1e1e;
+    --border2: #252525;
+    --text: #e0ddd6;
+    --text2: #888;
+    --text3: #444;
+    --green: #2d7a4f;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 380px;
+    background: var(--bg2);
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    padding: 36px 32px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 28px;
+  }
+  .brand svg { width: 30px; height: 30px; flex-shrink: 0; }
+  .brand-name { font-size: 14px; font-weight: 600; color: #fff; }
+  .brand-sub { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; }
+
+  h1 { font-size: 20px; font-weight: 300; color: #fff; margin-bottom: 6px; letter-spacing: -.01em; }
+  .lead { font-size: 13px; color: var(--text2); margin-bottom: 24px; }
+
+  label { display: block; font-size: 11px; color: var(--text2); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .06em; }
+  .field { margin-bottom: 16px; }
+  input {
+    width: 100%;
+    background: var(--bg3);
+    border: 0.5px solid var(--border2);
+    border-radius: 7px;
+    padding: 11px 12px;
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    outline: none;
+    transition: border-color .15s;
+  }
+  input:focus { border-color: var(--red); }
+  input::placeholder { color: var(--text3); }
+
+  button {
+    width: 100%;
+    background: var(--red);
+    color: #fff;
+    border: none;
+    border-radius: 7px;
+    padding: 12px;
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: opacity .15s;
+  }
+  button:hover { opacity: .9; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+
+  .error {
+    display: none;
+    background: rgba(232,41,58,0.08);
+    border: 0.5px solid rgba(232,41,58,0.2);
+    color: #ff8a94;
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-size: 12.5px;
+    margin-bottom: 16px;
+  }
+
+  .foot { margin-top: 20px; font-size: 11.5px; color: var(--text3); text-align: center; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="brand">
+    <svg viewBox="0 0 100 100" fill="none">
+      <polygon points="10,80 10,25 38,40 38,80" fill="#E8293A"/>
+      <polygon points="38,40 62,25 62,65 38,80" fill="#c0202e"/>
+      <polygon points="62,25 90,15 90,70 62,65" fill="#E8293A"/>
+    </svg>
+    <div>
+      <div class="brand-name">novalum</div>
+      <div class="brand-sub">Flujo de efectivo</div>
+    </div>
+  </div>
+
+  <h1>Iniciar sesión</h1>
+  <p class="lead">Entra con tu usuario y contraseña.</p>
+
+  <div class="error" id="error"></div>
+
+  <form id="form-login">
+    <div class="field">
+      <label for="username">Usuario</label>
+      <input type="text" id="username" name="username" placeholder="tu.usuario" autocomplete="username" required>
+    </div>
+    <div class="field">
+      <label for="password">Contraseña</label>
+      <input type="password" id="password" name="password" placeholder="••••••••" autocomplete="current-password" required>
+    </div>
+    <button type="submit" id="btn-login">Entrar</button>
+  </form>
+
+  <p class="foot">¿Usuario nuevo? Pide a un Admin que te agregue desde Backoffice.</p>
+</div>
+
+<script>
+const form = document.getElementById('form-login');
+const errorBox = document.getElementById('error');
+const btn = document.getElementById('btn-login');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  errorBox.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Entrando...';
+
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail || 'Usuario o contraseña incorrectos.');
+    }
+
+    const data = await res.json();
+    localStorage.setItem('token', data.access_token);
+    localStorage.setItem('rol', data.rol);
+
+    // Redirige segun el rol
+    if (data.pendiente_setup) {
+      window.location.href = '/setup.html';
+    } else {
+      window.location.href = '/index.html';
+    }
+  } catch (err) {
+    errorBox.textContent = err.message;
+    errorBox.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Entrar';
+  }
+});
+</script>
+
+</body>
+</html>
