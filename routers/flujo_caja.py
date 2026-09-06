@@ -187,6 +187,63 @@ def flujo_caja(
     }
 
 
+@router.get("/metodo-directo")
+def flujo_metodo_directo(
+    periodo: str = Query(..., description="Formato YYYY-MM"),
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(usuario_actual),
+):
+    """
+    Flujo de efectivo por metodo directo, usando SAP (movimientos_caja):
+    cada linea de banco/caja se clasifica segun la categoria de su cuenta
+    CONTRAPARTIDA (mapeo_cuentas). Entrada = la linea de banco fue debito
+    (el efectivo aumento). Salida = fue credito (el efectivo disminuyo).
+    """
+    inicio, fin = _rango_periodo(periodo)
+
+    filas = db.execute(
+        text("""
+            SELECT
+                COALESCE(m.categoria, 'sin_clasificar') AS categoria,
+                COALESCE(m.subcategoria, p.acct_name) AS subcategoria,
+                SUM(mc.debito) AS entradas,
+                SUM(mc.credito) AS salidas
+            FROM movimientos_caja mc
+            LEFT JOIN plan_cuentas p ON p.acct_code = mc.contrapartida_acct
+            LEFT JOIN mapeo_cuentas m ON m.acct_code = mc.contrapartida_acct
+            WHERE mc.fecha BETWEEN :inicio AND :fin
+            GROUP BY COALESCE(m.categoria, 'sin_clasificar'), COALESCE(m.subcategoria, p.acct_name)
+            ORDER BY categoria, subcategoria
+        """),
+        {"inicio": inicio, "fin": fin},
+    ).mappings().all()
+
+    secciones = {"operativo": [], "inversion": [], "financiamiento": [], "sin_clasificar": []}
+    totales = {"operativo": 0.0, "inversion": 0.0, "financiamiento": 0.0, "sin_clasificar": 0.0}
+
+    for f in filas:
+        entradas = float(f["entradas"] or 0)
+        salidas = float(f["salidas"] or 0)
+        neto = entradas - salidas
+        secciones[f["categoria"]].append({
+            "subcategoria": f["subcategoria"],
+            "entradas": entradas,
+            "salidas": salidas,
+            "neto": neto,
+        })
+        totales[f["categoria"]] += neto
+
+    return {
+        "periodo": periodo,
+        "operativo": {"lineas": secciones["operativo"], "neto": totales["operativo"]},
+        "inversion": {"lineas": secciones["inversion"], "neto": totales["inversion"]},
+        "financiamiento": {"lineas": secciones["financiamiento"], "neto": totales["financiamiento"]},
+        "sin_clasificar": {"lineas": secciones["sin_clasificar"], "neto": totales["sin_clasificar"]},
+        "neto_total": sum(totales.values()),
+        "items_sin_clasificar": len(secciones["sin_clasificar"]),
+    }
+
+
 @router.get("/tendencia")
 def tendencia_mensual(db: Session = Depends(get_db), usuario: dict = Depends(usuario_actual)):
     """

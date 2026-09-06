@@ -137,6 +137,7 @@
   <div class="nav-section">
     <span class="nav-label">SAP B1</span>
     <button class="nav-item" data-panel="validacion" onclick="mostrarPanel(this)">Validación SAP vs Banco</button>
+    <button class="nav-item" data-panel="mapeo" onclick="mostrarPanel(this)">Clasificar cuentas</button>
   </div>
   <div class="nav-section">
     <span class="nav-label">Otros</span>
@@ -218,6 +219,24 @@
   <div class="panel" id="panel-validacion">
     <div class="hero"><h1>Validación SAP vs Banco</h1><p>Compara cobros/pagos de SAP contra lo confirmado en cada extracto bancario.</p></div>
     <div id="validacion-contenido"><p class="empty">Cargando…</p></div>
+  </div>
+
+  <!-- ===================== CLASIFICAR CUENTAS ===================== -->
+  <div class="panel" id="panel-mapeo">
+    <div class="hero">
+      <h1>Clasificar cuentas</h1>
+      <p>Cuentas contables que aparecen como contrapartida de un movimiento de banco/caja — clasifícalas para armar el flujo por método directo.</p>
+    </div>
+    <div class="card">
+      <button class="secondary" onclick="clasificarRestoOperativo()">Clasificar todo lo pendiente como "operativo"</button>
+      <p style="font-size:11.5px;margin-top:8px">Úsalo después de clasificar a mano las cuentas de préstamos / activos fijos — el resto casi siempre es operativo.</p>
+    </div>
+    <div class="card">
+      <table>
+        <thead><tr><th>Cuenta</th><th>Volumen</th><th>Categoría</th><th></th></tr></thead>
+        <tbody id="tabla-mapeo"><tr><td colspan="4" class="empty">Cargando…</td></tr></tbody>
+      </table>
+    </div>
   </div>
 
 </main>
@@ -429,11 +448,50 @@ async function cargarValidacion() {
   `).join('');
 }
 
+// ---------- Clasificar cuentas ----------
+async function cargarMapeo() {
+  const res = await fetch('/api/mapeo-cuentas', { headers });
+  const cuentas = await res.json();
+  const tbody = document.getElementById('tabla-mapeo');
+  tbody.innerHTML = cuentas.length ? cuentas.map(c => `
+    <tr>
+      <td class="strong">${c.acct_code} — ${c.acct_name}</td>
+      <td class="strong">${Number(c.volumen).toLocaleString('es-DO', {minimumFractionDigits:2})}</td>
+      <td>${c.categoria ? `<span class="badge pendiente">${c.categoria}</span>` : '<span class="empty">sin clasificar</span>'}</td>
+      <td>
+        <select onchange="clasificarCuenta('${c.acct_code}', this.value)" style="width:auto">
+          <option value="">Elegir…</option>
+          <option value="operativo" ${c.categoria==='operativo'?'selected':''}>Operativo</option>
+          <option value="inversion" ${c.categoria==='inversion'?'selected':''}>Inversión</option>
+          <option value="financiamiento" ${c.categoria==='financiamiento'?'selected':''}>Financiamiento</option>
+        </select>
+      </td>
+    </tr>`).join('') : '<tr><td colspan="4" class="empty">No hay cuentas contrapartida todavía — corre sync_flujo.py primero.</td></tr>';
+}
+
+async function clasificarCuenta(acctCode, categoria) {
+  if (!categoria) return;
+  await fetch(`/api/mapeo-cuentas/${acctCode}`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ categoria }),
+  });
+  cargarMapeo();
+}
+
+async function clasificarRestoOperativo() {
+  const res = await fetch('/api/mapeo-cuentas/default-operativo', { method: 'POST', headers });
+  const data = await res.json();
+  alert(data.mensaje);
+  cargarMapeo();
+}
+
 // ---------- Init ----------
 cargarBancos();
 cargarCuentas();
 cargarConciliacion();
 cargarValidacion();
+cargarMapeo();
 </script>
 </body>
 </html>

@@ -184,6 +184,12 @@
     </table>
   </div>
 
+  <div class="card">
+    <h3>Flujo de efectivo — Método directo (SAP)</h3>
+    <p style="font-size:12px">Clasificado por actividad, usando movimientos_caja de SAP y las cuentas ya clasificadas en Backoffice → Clasificar cuentas.</p>
+    <div id="metodo-directo-contenido"><p class="empty">Cargando…</p></div>
+  </div>
+
 </main>
 </div>
 
@@ -211,6 +217,8 @@ async function cargarPeriodos() {
 async function cargarFlujo(periodo) {
   const res = await fetch(`/api/flujo-caja?periodo=${periodo}`, { headers });
   const data = await res.json();
+
+  cargarMetodoDirecto(periodo);
 
   document.getElementById('kpi-entradas').textContent = formatearMonto(data.total_entradas_rd, 'RD$');
   document.getElementById('kpi-salidas').textContent = formatearMonto(data.total_salidas_rd, 'RD$');
@@ -265,6 +273,40 @@ async function cargarTendencia() {
           <td class="num strong">${formatearMonto(t.neto, t.moneda)}</td>
         </tr>`).join('')
     : '<tr><td colspan="5" class="empty">Sin datos confirmados todavía.</td></tr>';
+}
+
+async function cargarMetodoDirecto(periodo) {
+  const res = await fetch(`/api/flujo-caja/metodo-directo?periodo=${periodo}`, { headers });
+  const data = await res.json();
+  const cont = document.getElementById('metodo-directo-contenido');
+
+  const seccion = (titulo, s) => `
+    <h4 style="font-size:12.5px;color:#fff;margin-top:14px">${titulo} — neto ${formatearMonto(s.neto, 'RD$')}</h4>
+    <table>
+      <tbody>
+        ${s.lineas.length ? s.lineas.map(l => `
+          <tr>
+            <td>${l.subcategoria}</td>
+            <td class="num strong">+${formatearMonto(l.entradas, 'RD$')}</td>
+            <td class="num strong">-${formatearMonto(l.salidas, 'RD$')}</td>
+          </tr>`).join('') : '<tr><td colspan="3" class="empty">Sin movimientos.</td></tr>'}
+      </tbody>
+    </table>
+  `;
+
+  let alertaSinClasificar = '';
+  if (data.items_sin_clasificar > 0) {
+    alertaSinClasificar = `<div class="alert warning">⚠ ${data.items_sin_clasificar} cuenta(s) contrapartida sin clasificar — ve a Backoffice → Clasificar cuentas.</div>`;
+  }
+
+  cont.innerHTML = `
+    ${alertaSinClasificar}
+    ${seccion('Actividades operativas', data.operativo)}
+    ${seccion('Actividades de inversión', data.inversion)}
+    ${seccion('Actividades de financiamiento', data.financiamiento)}
+    ${data.sin_clasificar.lineas.length ? seccion('Sin clasificar', data.sin_clasificar) : ''}
+    <p style="margin-top:14px;font-size:13px;color:#fff">Neto total: <strong>${formatearMonto(data.neto_total, 'RD$')}</strong></p>
+  `;
 }
 
 cargarPeriodos();
