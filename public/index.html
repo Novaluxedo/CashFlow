@@ -186,7 +186,7 @@
 
   <div class="card">
     <h3>Flujo de efectivo — Método directo (SAP)</h3>
-    <p style="font-size:12px">Clasificado por actividad, usando movimientos_caja de SAP y las cuentas ya clasificadas en Backoffice → Clasificar cuentas.</p>
+    <p style="font-size:12px">Entradas por forma de cobro y salidas por forma de pago, directo de SAP (cobros/pagos) — sin clasificación manual.</p>
     <div id="metodo-directo-contenido"><p class="empty">Cargando…</p></div>
   </div>
 
@@ -280,32 +280,23 @@ async function cargarMetodoDirecto(periodo) {
   const data = await res.json();
   const cont = document.getElementById('metodo-directo-contenido');
 
-  const seccion = (titulo, s) => `
-    <h4 style="font-size:12.5px;color:#fff;margin-top:14px">${titulo} — neto ${formatearMonto(s.neto, 'RD$')}</h4>
-    <table>
-      <tbody>
-        ${s.lineas.length ? s.lineas.map(l => `
-          <tr>
-            <td>${l.subcategoria}</td>
-            <td class="num strong">+${formatearMonto(l.entradas, 'RD$')}</td>
-            <td class="num strong">-${formatearMonto(l.salidas, 'RD$')}</td>
-          </tr>`).join('') : '<tr><td colspan="3" class="empty">Sin movimientos.</td></tr>'}
-      </tbody>
-    </table>
-  `;
-
-  let alertaSinClasificar = '';
-  if (data.items_sin_clasificar > 0) {
-    alertaSinClasificar = `<div class="alert warning">⚠ ${data.items_sin_clasificar} cuenta(s) contrapartida sin clasificar — ve a Backoffice → Clasificar cuentas.</div>`;
-  }
+  const filaLinea = (l) => `
+    <tr>
+      <td>${l.etiqueta} <span style="color:var(--text3)">(${l.cantidad})</span></td>
+      <td>${l.moneda}</td>
+      <td class="num strong">${formatearMonto(l.monto, l.moneda)}</td>
+    </tr>`;
 
   cont.innerHTML = `
-    ${alertaSinClasificar}
-    ${seccion('Actividades operativas', data.operativo)}
-    ${seccion('Actividades de inversión', data.inversion)}
-    ${seccion('Actividades de financiamiento', data.financiamiento)}
-    ${data.sin_clasificar.lineas.length ? seccion('Sin clasificar', data.sin_clasificar) : ''}
-    <p style="margin-top:14px;font-size:13px;color:#fff">Neto total: <strong>${formatearMonto(data.neto_total, 'RD$')}</strong></p>
+    <h4 style="font-size:12.5px;color:#fff;margin-top:14px">Entradas</h4>
+    <table><tbody>
+      ${data.entradas.length ? data.entradas.map(filaLinea).join('') : '<tr><td colspan="3" class="empty">Sin cobros este período.</td></tr>'}
+    </tbody></table>
+
+    <h4 style="font-size:12.5px;color:#fff;margin-top:14px">Salidas</h4>
+    <table><tbody>
+      ${data.salidas.length ? data.salidas.map(filaLinea).join('') : '<tr><td colspan="3" class="empty">Sin pagos este período.</td></tr>'}
+    </tbody></table>
   `;
 }
 
