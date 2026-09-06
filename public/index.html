@@ -193,6 +193,24 @@
     <div id="metodo-directo-contenido"><p class="empty">Cargando…</p></div>
   </div>
 
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <h3>Cuentas por cobrar — Ventas vs. Cobros, por mes (USD)</h3>
+      <a href="/cxc.html" style="font-size:11.5px;color:var(--amber);text-decoration:none">Ver detalle por cliente →</a>
+    </div>
+    <div id="alerta-cxc-resumen"></div>
+    <table>
+      <thead>
+        <tr><th>Mes</th><th class="num">Ventas</th><th class="num">Cobros</th><th class="num">Variación neta</th><th class="num">Saldo abierto (origen ese mes)</th></tr>
+      </thead>
+      <tbody id="tabla-cxc-resumen"><tr><td colspan="5" class="empty">Cargando…</td></tr></tbody>
+    </table>
+    <p style="font-size:11px;color:var(--text3);margin-top:10px">
+      Variación positiva = se vendió más de lo que se cobró ese mes (creció CxC). Negativa = se cobró más de lo facturado (se cobró cartera vieja).
+      "Saldo abierto" es lo que sigue pendiente HOY de lo facturado en ese mes — no un histórico del saldo mes a mes.
+    </p>
+  </div>
+
 </main>
 </div>
 
@@ -361,9 +379,32 @@ async function cargarMetodoDirecto() {
   `;
 }
 
+async function cargarResumenCxC() {
+  const res = await fetch('/api/cxc/resumen-mensual', { headers });
+  const data = await res.json();
+
+  const alertaBox = document.getElementById('alerta-cxc-resumen');
+  alertaBox.innerHTML = data.advertencia
+    ? `<div class="alert warning">⚠ ${data.advertencia}</div>`
+    : '';
+
+  const tbody = document.getElementById('tabla-cxc-resumen');
+  tbody.innerHTML = data.meses.length
+    ? data.meses.map(m => `
+        <tr>
+          <td class="strong">${m.periodo}</td>
+          <td class="num strong">${formatearMonto(m.ventas_usd, 'USD')}</td>
+          <td class="num strong">${formatearMonto(m.cobros_usd, 'USD')}</td>
+          <td class="num strong" style="color:${m.variacion_neta_usd >= 0 ? 'var(--amber)' : '#4caf7a'}">${formatearMonto(m.variacion_neta_usd, 'USD')}</td>
+          <td class="num strong">${formatearMonto(m.saldo_abierto_usd, 'USD')}</td>
+        </tr>`).join('')
+    : '<tr><td colspan="5" class="empty">Sin datos todavía — correr sync_flujo.py.</td></tr>';
+}
+
 cargarPeriodos();
 cargarTendencia();
 cargarMetodoDirecto();
+cargarResumenCxC();
 </script>
 </body>
 </html>

@@ -118,6 +118,97 @@ def saldo_abierto_resumen_por_cliente(
     ]
 
 
+@router.get("/resumen-mensual")
+def resumen_mensual(
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(usuario_actual),
+):
+    """
+    Metricas 1 y 2, agregadas por mes solamente (sin desglose por cliente) -
+    pensado para el dashboard principal (index.html), no para investigacion
+    puntual. Para el detalle por cliente, usar /seguimiento y /saldo-abierto.
+
+    Metrica 1 (ventas_usd, cobros_usd, variacion_neta_usd): igual formula
+    que /seguimiento pero agregando todos los clientes juntos por mes.
+
+    Metrica 2 (saldo_abierto_usd, facturas_abiertas): saldo abierto HOY,
+    agrupado por el mes en que se origino la venta - es una foto actual,
+    no un historico de como se movio el saldo mes a mes.
+    """
+    ventas = db.execute(
+        text("""
+            SELECT date_trunc('month', fecha)::date AS mes, SUM(debito) AS ventas_usd
+            FROM cxc_movimientos
+            WHERE trans_type = '13'
+            GROUP BY 1
+        """)
+    ).mappings().all()
+
+    cobros = db.execute(
+        text("""
+            SELECT date_trunc('month', fecha)::date AS mes,
+                   SUM(
+                       CASE WHEN moneda = 'USD' THEN monto
+                            ELSE monto * COALESCE(tasa_cambio, 0)
+                       END
+                   ) AS cobros_usd,
+                   SUM(CASE WHEN tasa_cambio IS NULL AND moneda != 'USD' THEN 1 ELSE 0 END) AS cobros_sin_tasa
+            FROM cobros
+            GROUP BY 1
+        """)
+    ).mappings().all()
+
+    saldo_abierto = db.execute(
+        text("""
+            SELECT date_trunc('month', fecha)::date AS mes,
+                   COUNT(*) AS facturas_abiertas,
+                   SUM(saldo_abierto_debito) AS saldo_abierto_usd
+            FROM cxc_movimientos
+            WHERE trans_type = '13' AND saldo_abierto_debito > 0
+            GROUP BY 1
+        """)
+    ).mappings().all()
+
+    combinado: dict = {}
+    total_cobros_sin_tasa = 0
+
+    for v in ventas:
+        combinado.setdefault(v["mes"], {}).update({"ventas_usd": float(v["ventas_usd"])})
+
+    for c in cobros:
+        combinado.setdefault(c["mes"], {}).update({"cobros_usd": float(c["cobros_usd"] or 0)})
+        total_cobros_sin_tasa += c["cobros_sin_tasa"]
+
+    for s in saldo_abierto:
+        combinado.setdefault(s["mes"], {}).update({
+            "facturas_abiertas": s["facturas_abiertas"],
+            "saldo_abierto_usd": float(s["saldo_abierto_usd"]),
+        })
+
+    resultado = []
+    for mes, datos in sorted(combinado.items()):
+        ventas_usd = datos.get("ventas_usd", 0.0)
+        cobros_usd = datos.get("cobros_usd", 0.0)
+        resultado.append({
+            "periodo": f"{mes.year}-{mes.month:02d}",
+            "ventas_usd": round(ventas_usd, 2),
+            "cobros_usd": round(cobros_usd, 2),
+            "variacion_neta_usd": round(ventas_usd - cobros_usd, 2),
+            "facturas_abiertas": datos.get("facturas_abiertas", 0),
+            "saldo_abierto_usd": round(datos.get("saldo_abierto_usd", 0.0), 2),
+        })
+
+    respuesta = {"meses": resultado}
+
+    if total_cobros_sin_tasa:
+        respuesta["advertencia"] = (
+            f"{total_cobros_sin_tasa} cobro(s) en RD$ sin tasa_cambio registrada - "
+            "sus cobros_usd salen incompletos hasta volver a correr sync_flujo.py."
+        )
+
+    return respuesta
+
+
 @router.get("/seguimiento")
 def seguimiento_ventas_vs_cobros(
     periodo: str | None = Query(None, description="YYYY-MM opcional. Sin esto, trae todos los meses disponibles."),
