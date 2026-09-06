@@ -136,22 +136,24 @@
 
   <div id="alerta-conciliar"></div>
 
-  <div class="kpi-grid">
-    <div class="kpi-card">
-      <div class="kpi-label">Entradas confirmadas</div>
-      <div class="kpi-value pos" id="kpi-entradas">—</div>
-      <div class="kpi-sub">excluye transferencias internas y divisas</div>
+  <div class="kpi-grid" style="grid-template-columns: repeat(2, 1fr)">
+    <div class="kpi-card" style="cursor:pointer" onclick="toggleDetalle('usd')">
+      <div class="kpi-label">Balance consolidado — USD <span style="color:var(--text3)">▾ ver detalle</span></div>
+      <div class="kpi-value" id="kpi-usd-neto">—</div>
+      <div class="kpi-sub"><span class="pos" id="kpi-usd-entradas">—</span> entradas · <span class="neg" id="kpi-usd-salidas">—</span> salidas</div>
+      <div id="detalle-usd" style="display:none;margin-top:12px" onclick="event.stopPropagation()"></div>
     </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Salidas confirmadas</div>
-      <div class="kpi-value neg" id="kpi-salidas">—</div>
-      <div class="kpi-sub">excluye transferencias internas y divisas</div>
+    <div class="kpi-card" style="cursor:pointer" onclick="toggleDetalle('rd')">
+      <div class="kpi-label">Balance consolidado — RD$ <span style="color:var(--text3)">▾ ver detalle</span></div>
+      <div class="kpi-value" id="kpi-rd-neto">—</div>
+      <div class="kpi-sub"><span class="pos" id="kpi-rd-entradas">—</span> entradas · <span class="neg" id="kpi-rd-salidas">—</span> salidas</div>
+      <div id="detalle-rd" style="display:none;margin-top:12px" onclick="event.stopPropagation()"></div>
     </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Por conciliar</div>
-      <div class="kpi-value warn" id="kpi-conciliar">—</div>
-      <div class="kpi-sub"><a href="/backoffice.html" style="color:var(--amber)">ver en Backoffice →</a></div>
-    </div>
+  </div>
+
+  <div class="card">
+    <h3>Por conciliar este período</h3>
+    <p id="texto-por-conciliar" style="font-size:12.5px">—</p>
   </div>
 
   <div class="card">
@@ -185,8 +187,8 @@
   </div>
 
   <div class="card">
-    <h3>Flujo de efectivo — Método directo (SAP)</h3>
-    <p style="font-size:12px">Entradas por forma de cobro y salidas por forma de pago, directo de SAP (cobros/pagos) — sin clasificación manual.</p>
+    <h3>Flujo de efectivo — Método directo (SAP), por mes</h3>
+    <p style="font-size:12px">Entradas por forma de cobro y salidas por forma de pago, un mes por columna — no depende del selector de arriba.</p>
     <div id="metodo-directo-contenido"><p class="empty">Cargando…</p></div>
   </div>
 
@@ -205,6 +207,31 @@ function formatearMonto(valor, moneda) {
   return `${signo}${simbolo} ${Math.abs(valor).toLocaleString('es-DO', { minimumFractionDigits: 2 })}`;
 }
 
+function toggleDetalle(moneda) {
+  const el = document.getElementById(`detalle-${moneda}`);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function renderDetalle(monedaClave) {
+  const monedaReal = monedaClave === 'usd' ? 'USD' : 'RD$';
+  const cuentas = porCuentaActual.filter(c => c.moneda === monedaReal);
+  const el = document.getElementById(`detalle-${monedaClave}`);
+  el.innerHTML = cuentas.length ? `
+    <table style="margin-top:0">
+      <thead><tr><th>Banco</th><th class="num">Entradas</th><th class="num">Salidas</th><th class="num">Neto</th></tr></thead>
+      <tbody>
+        ${cuentas.map(c => `
+          <tr>
+            <td class="strong">${c.alias}</td>
+            <td class="num strong">${formatearMonto(c.entradas, c.moneda)}</td>
+            <td class="num strong">${formatearMonto(c.salidas, c.moneda)}</td>
+            <td class="num strong">${formatearMonto(c.neto, c.moneda)}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+  ` : '<p class="empty">Sin cuentas en esta moneda.</p>';
+}
+
 async function cargarPeriodos() {
   const res = await fetch('/api/flujo-caja/periodos', { headers });
   const periodos = await res.json();
@@ -214,15 +241,19 @@ async function cargarPeriodos() {
   if (periodos.length) cargarFlujo(periodos[0].valor);
 }
 
+let porCuentaActual = [];
+
 async function cargarFlujo(periodo) {
   const res = await fetch(`/api/flujo-caja?periodo=${periodo}`, { headers });
   const data = await res.json();
 
-  cargarMetodoDirecto(periodo);
+  document.getElementById('kpi-usd-neto').textContent = formatearMonto(data.consolidado_usd.neto, 'USD');
+  document.getElementById('kpi-usd-entradas').textContent = formatearMonto(data.consolidado_usd.entradas, 'USD');
+  document.getElementById('kpi-usd-salidas').textContent = formatearMonto(data.consolidado_usd.salidas, 'USD');
 
-  document.getElementById('kpi-entradas').textContent = formatearMonto(data.total_entradas_rd, 'RD$');
-  document.getElementById('kpi-salidas').textContent = formatearMonto(data.total_salidas_rd, 'RD$');
-  document.getElementById('kpi-conciliar').textContent = formatearMonto(data.total_por_conciliar_rd, 'RD$');
+  document.getElementById('kpi-rd-neto').textContent = formatearMonto(data.consolidado_rd.neto, 'RD$');
+  document.getElementById('kpi-rd-entradas').textContent = formatearMonto(data.consolidado_rd.entradas, 'RD$');
+  document.getElementById('kpi-rd-salidas').textContent = formatearMonto(data.consolidado_rd.salidas, 'RD$');
 
   const pct = data.porcentaje_confirmado;
   document.getElementById('confiabilidad-pct').textContent = `${pct}% confirmado`;
@@ -232,8 +263,17 @@ async function cargarFlujo(periodo) {
 
   const alertaBox = document.getElementById('alerta-conciliar');
   alertaBox.innerHTML = data.items_por_conciliar > 0
-    ? `<div class="alert warning">⚠ Hay ${data.items_por_conciliar} movimientos por conciliar este período — el flujo de arriba no los incluye.</div>`
+    ? `<div class="alert warning">⚠ Hay ${data.items_por_conciliar} movimientos por conciliar este período — el balance de arriba no los incluye.</div>`
     : '';
+
+  const porMoneda = data.por_conciliar_por_moneda || {};
+  document.getElementById('texto-por-conciliar').innerHTML = data.items_por_conciliar > 0
+    ? `${data.items_por_conciliar} movimiento(s) — ${Object.entries(porMoneda).map(([m, v]) => formatearMonto(v, m)).join(' + ')}. <a href="/backoffice.html" style="color:var(--amber)">Revisar en Backoffice →</a>`
+    : 'Ninguno este período 🎉';
+
+  porCuentaActual = data.por_cuenta;
+  renderDetalle('usd');
+  renderDetalle('rd');
 
   const tbody = document.getElementById('tabla-cuentas');
   tbody.innerHTML = data.por_cuenta.length
@@ -275,33 +315,54 @@ async function cargarTendencia() {
     : '<tr><td colspan="5" class="empty">Sin datos confirmados todavía.</td></tr>';
 }
 
-async function cargarMetodoDirecto(periodo) {
-  const res = await fetch(`/api/flujo-caja/metodo-directo?periodo=${periodo}`, { headers });
-  const data = await res.json();
+async function cargarMetodoDirecto() {
+  const res = await fetch(`/api/flujo-caja/metodo-directo/tendencia`, { headers });
+  const filas = await res.json();
   const cont = document.getElementById('metodo-directo-contenido');
 
-  const filaLinea = (l) => `
+  if (!filas.length) {
+    cont.innerHTML = '<p class="empty">Sin datos todavía.</p>';
+    return;
+  }
+
+  // Meses únicos, ordenados
+  const meses = [...new Map(filas.map(f => [f.periodo, f.etiqueta])).entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]));
+
+  // Filas únicas: tipo + linea + moneda (para no mezclar USD y RD$ en la misma fila)
+  const clave = f => `${f.tipo}|${f.linea}|${f.moneda}`;
+  const lineasMap = new Map();
+  filas.forEach(f => {
+    if (!lineasMap.has(clave(f))) lineasMap.set(clave(f), { tipo: f.tipo, linea: f.linea, moneda: f.moneda, porMes: {} });
+    lineasMap.get(clave(f)).porMes[f.periodo] = f.monto;
+  });
+
+  const filaHtml = (l) => `
     <tr>
-      <td>${l.etiqueta} <span style="color:var(--text3)">(${l.cantidad})</span></td>
-      <td>${l.moneda}</td>
-      <td class="num strong">${formatearMonto(l.monto, l.moneda)}</td>
+      <td class="strong">${l.linea} <span style="color:var(--text3)">(${l.moneda})</span></td>
+      ${meses.map(([p]) => `<td class="num strong">${l.porMes[p] !== undefined ? formatearMonto(l.porMes[p], l.moneda) : '—'}</td>`).join('')}
     </tr>`;
 
-  cont.innerHTML = `
-    <h4 style="font-size:12.5px;color:#fff;margin-top:14px">Entradas</h4>
-    <table><tbody>
-      ${data.entradas.length ? data.entradas.map(filaLinea).join('') : '<tr><td colspan="3" class="empty">Sin cobros este período.</td></tr>'}
-    </tbody></table>
+  const entradas = [...lineasMap.values()].filter(l => l.tipo === 'entrada');
+  const salidas = [...lineasMap.values()].filter(l => l.tipo === 'salida');
 
-    <h4 style="font-size:12.5px;color:#fff;margin-top:14px">Salidas</h4>
-    <table><tbody>
-      ${data.salidas.length ? data.salidas.map(filaLinea).join('') : '<tr><td colspan="3" class="empty">Sin pagos este período.</td></tr>'}
-    </tbody></table>
+  cont.innerHTML = `
+    <div style="overflow-x:auto">
+    <table>
+      <thead><tr><th>Entradas</th>${meses.map(([, et]) => `<th class="num">${et}</th>`).join('')}</tr></thead>
+      <tbody>${entradas.map(filaHtml).join('')}</tbody>
+    </table>
+    <table style="margin-top:14px">
+      <thead><tr><th>Salidas</th>${meses.map(([, et]) => `<th class="num">${et}</th>`).join('')}</tr></thead>
+      <tbody>${salidas.map(filaHtml).join('')}</tbody>
+    </table>
+    </div>
   `;
 }
 
 cargarPeriodos();
 cargarTendencia();
+cargarMetodoDirecto();
 </script>
 </body>
 </html>

@@ -37,7 +37,8 @@ def _rango_periodo(periodo: str) -> tuple[date, date]:
 
 
 def _obtener_tasa_bcrd(db: Session, hasta_fecha: date) -> float | None:
-    """Tasa de venta BCRD vigente mas reciente en o antes de hasta_fecha. None si no hay ninguna cargada."""
+    """Tasa de venta BCRD vigente mas reciente en o antes de hasta_fecha. None si no hay ninguna cargada.
+    (Ya no se usa en /api/flujo-caja - se dejo aparte por si se necesita mas adelante para otro reporte.)"""
     fila = db.execute(
         text(
             "SELECT tasa_venta FROM tasas_cambio_bcrd "
@@ -70,7 +71,6 @@ def flujo_caja(
     usuario: dict = Depends(usuario_actual),
 ):
     inicio, fin = _rango_periodo(periodo)
-    tasa_bcrd = _obtener_tasa_bcrd(db, fin)
 
     # ---------- Flujo confirmado, por cuenta ----------
     por_cuenta_filas = db.execute(
@@ -102,19 +102,14 @@ def flujo_caja(
         for f in por_cuenta_filas
     ]
 
-    # ---------- Consolidado (si hay tasa BCRD disponible) ----------
-    def _convertir_a_rd(monto: float, moneda: str) -> float | None:
-        if moneda == "RD$":
-            return monto
-        if tasa_bcrd is None:
-            return None
-        return monto * tasa_bcrd
-
-    entradas_convertidas = [_convertir_a_rd(c["entradas"], c["moneda"]) for c in por_cuenta]
-    salidas_convertidas = [_convertir_a_rd(c["salidas"], c["moneda"]) for c in por_cuenta]
-
-    total_entradas_rd = None if any(v is None for v in entradas_convertidas) else sum(entradas_convertidas)
-    total_salidas_rd = None if any(v is None for v in salidas_convertidas) else sum(salidas_convertidas)
+    # ---------- Consolidado por moneda (sin conversion - USD y RD$ aparte) ----------
+    consolidado_usd = {"entradas": 0.0, "salidas": 0.0, "neto": 0.0}
+    consolidado_rd = {"entradas": 0.0, "salidas": 0.0, "neto": 0.0}
+    for c in por_cuenta:
+        destino = consolidado_usd if c["moneda"] == "USD" else consolidado_rd
+        destino["entradas"] += c["entradas"]
+        destino["salidas"] += c["salidas"]
+        destino["neto"] += c["neto"]
 
     # ---------- Por conciliar (confiabilidad del dato) ----------
     pendientes = db.execute(
@@ -131,10 +126,7 @@ def flujo_caja(
     ).mappings().all()
 
     items_por_conciliar = sum(p["cantidad"] for p in pendientes)
-    montos_pendientes_rd = [_convertir_a_rd(float(p["monto"]), p["moneda"]) for p in pendientes]
-    total_por_conciliar_rd = (
-        None if any(v is None for v in montos_pendientes_rd) else sum(montos_pendientes_rd)
-    )
+    por_conciliar_por_moneda = {p["moneda"]: float(p["monto"]) for p in pendientes}
 
     items_confirmados = db.execute(
         text("""
@@ -176,10 +168,9 @@ def flujo_caja(
 
     return {
         "periodo": periodo,
-        "tasa_bcrd_usada": tasa_bcrd,
-        "total_entradas_rd": total_entradas_rd,
-        "total_salidas_rd": total_salidas_rd,
-        "total_por_conciliar_rd": total_por_conciliar_rd,
+        "consolidado_usd": consolidado_usd,
+        "consolidado_rd": consolidado_rd,
+        "por_conciliar_por_moneda": por_conciliar_por_moneda,
         "items_por_conciliar": items_por_conciliar,
         "porcentaje_confirmado": porcentaje_confirmado,
         "por_cuenta": por_cuenta,
@@ -253,6 +244,61 @@ def flujo_metodo_directo(
         "total_entradas": sum(l["monto"] for l in lineas_entradas),
         "total_salidas": sum(l["monto"] for l in lineas_salidas),
     }
+
+
+@router.get("/metodo-directo/tendencia")
+def flujo_metodo_directo_tendencia(db: Session = Depends(get_db), usuario: dict = Depends(usuario_actual)):
+    """
+    Mismo desglose por forma de cobro/pago que /metodo-directo, pero para
+    TODOS los meses con datos - pensado para pintar una tabla con los
+    meses en columnas.
+    """
+    etiquetas = {
+        "efectivo": "Ventas en efectivo", "transferencia": "Ventas por transferencia",
+        "tarjeta": "Ventas con tarjeta", "cheque": "Cobros por cheque", "otro": "Otros cobros",
+    }
+    etiquetas_pago = {
+        "efectivo": "Pagos en efectivo", "transferencia": "Pagos por transferencia",
+        "cheque": "Pagos con cheque", "otro": "Otros pagos",
+    }
+
+    entradas = db.execute(
+        text("""
+            SELECT date_trunc('month', fecha)::date AS mes, forma_cobro, moneda, SUM(monto) AS total
+            FROM cobros
+            GROUP BY date_trunc('month', fecha), forma_cobro, moneda
+        """)
+    ).mappings().all()
+
+    salidas = db.execute(
+        text("""
+            SELECT date_trunc('month', fecha)::date AS mes, forma_pago, moneda, SUM(monto) AS total
+            FROM pagos
+            GROUP BY date_trunc('month', fecha), forma_pago, moneda
+        """)
+    ).mappings().all()
+
+    filas = []
+    for e in entradas:
+        filas.append({
+            "periodo": f"{e['mes'].year}-{e['mes'].month:02d}",
+            "etiqueta": f"{MESES_ES[e['mes'].month][:3]} {e['mes'].year}",
+            "tipo": "entrada",
+            "linea": etiquetas.get(e["forma_cobro"], e["forma_cobro"]),
+            "moneda": e["moneda"],
+            "monto": float(e["total"]),
+        })
+    for s in salidas:
+        filas.append({
+            "periodo": f"{s['mes'].year}-{s['mes'].month:02d}",
+            "etiqueta": f"{MESES_ES[s['mes'].month][:3]} {s['mes'].year}",
+            "tipo": "salida",
+            "linea": etiquetas_pago.get(s["forma_pago"], s["forma_pago"]),
+            "moneda": s["moneda"],
+            "monto": float(s["total"]),
+        })
+
+    return filas
 
 
 @router.get("/tendencia")
