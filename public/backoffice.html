@@ -104,6 +104,7 @@
   .upload-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 0.5px solid var(--bg3); font-size: 12.5px; }
   .upload-item .status.ok { color: #4caf7a; }
   .upload-item .status.err { color: var(--red); }
+  .upload-item .status.warn { color: var(--amber); }
   .upload-item .status.pending { color: var(--text2); }
 
   .empty { color: var(--text3); font-size: 12.5px; padding: 16px 0; }
@@ -312,9 +313,15 @@ async function subirArchivos(files) {
       const res = await fetch('/api/extractos/upload', { method: 'POST', headers, body: formData });
       const data = await res.json();
       if (res.ok) {
-        row.querySelector('.status').className = 'status ok';
-        row.querySelector('.status').textContent =
-          `${data.cuenta} · ${data.periodo_inicio} → ${data.periodo_fin} · ${data.movimientos_nuevos} nuevos, ${data.movimientos_duplicados} ya existían`;
+        if (data.ya_cargado) {
+          row.querySelector('.status').className = 'status warn';
+          row.querySelector('.status').textContent =
+            `Ya estaba cargado — ${data.cuenta} · ${data.periodo_inicio} → ${data.periodo_fin} (0 movimientos nuevos)`;
+        } else {
+          row.querySelector('.status').className = 'status ok';
+          row.querySelector('.status').textContent =
+            `${data.cuenta} · ${data.periodo_inicio} → ${data.periodo_fin} · ${data.movimientos_nuevos} nuevos, ${data.movimientos_duplicados} ya existían`;
+        }
       } else {
         row.querySelector('.status').className = 'status err';
         row.querySelector('.status').textContent = data.detail || 'Error al procesar';

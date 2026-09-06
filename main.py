@@ -71,13 +71,13 @@ def pagina_backoffice():
 # Un Mount en "/" intercepta cualquier ruta que no se haya registrado todavia,
 # asi que si un router se agrega despues del mount, sus endpoints nunca se alcanzan.
 # ------------------------------------------------------------------
-from routers import auth  # noqa: E402
-# from routers import backoffice, extractos, conciliacion, flujo_caja
+from routers import auth, backoffice, conciliacion, extractos  # noqa: E402
+# from routers import flujo_caja
 
 app.include_router(auth.router)
-# app.include_router(backoffice.router)
-# app.include_router(extractos.router)
-# app.include_router(conciliacion.router)
+app.include_router(backoffice.router)
+app.include_router(extractos.router)
+app.include_router(conciliacion.router)
 # app.include_router(flujo_caja.router)
 
 
