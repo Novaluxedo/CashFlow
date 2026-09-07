@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flujo de Efectivo — Guía de Continuidad</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --red: #E8293A;
+    --red-dim: rgba(232,41,58,0.12);
+    --gold: #c9a84c;
+    --bg: #0c0c0c;
+    --bg2: #111;
+    --bg3: #161616;
+    --border: #1e1e1e;
+    --border2: #252525;
+    --text: #e0ddd6;
+    --text2: #888;
+    --text3: #444;
+    --green: #2d7a4f;
+    --green-dim: rgba(45,122,79,0.12);
+    --amber: #c9a84c;
+    --amber-dim: rgba(201,168,76,0.1);
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  .layout { display: flex; min-height: 100vh; }
+
+  .sidebar {
+    width: 250px;
+    flex-shrink: 0;
+    background: var(--bg2);
+    border-right: 0.5px solid var(--border);
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 24px 0;
+  }
+  .sidebar-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 20px 24px;
+    border-bottom: 0.5px solid var(--border);
+    margin-bottom: 16px;
+  }
+  .logo-mark { width: 32px; height: 32px; flex-shrink: 0; }
+  .logo-name { font-size: 14px; font-weight: 600; color: #fff; }
+  .logo-sub { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; }
+
+  .nav-section { padding: 0 12px; margin-bottom: 4px; }
+  .nav-label {
+    font-size: 9px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    padding: 8px 8px 4px;
+    display: block;
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    border-radius: 6px;
+    color: var(--text2);
+    text-decoration: none;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all .15s;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+  }
+  .nav-item:hover { background: var(--bg3); color: var(--text); }
+  .nav-item.active { background: var(--red-dim); color: var(--red); }
+  .nav-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text3); flex-shrink: 0; }
+  .nav-item.active .nav-dot { background: var(--red); }
+
+  .main { flex: 1; max-width: 880px; padding: 48px; overflow-x: hidden; }
+
+  .hero { margin-bottom: 48px; padding-bottom: 32px; border-bottom: 0.5px solid var(--border); }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--red-dim); border: 0.5px solid rgba(232,41,58,0.2);
+    border-radius: 20px; padding: 4px 12px; font-size: 11px; color: var(--red); margin-bottom: 16px;
+  }
+  .hero h1 { font-size: 32px; font-weight: 300; color: #fff; letter-spacing: -.02em; margin-bottom: 10px; line-height: 1.2; }
+  .hero h1 strong { font-weight: 600; }
+  .hero p { font-size: 15px; color: var(--text2); max-width: 580px; }
+
+  .section { margin-bottom: 56px; scroll-margin-top: 32px; }
+  .section-header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+  .section-num {
+    width: 28px; height: 28px; border-radius: 7px;
+    background: var(--red-dim); border: 0.5px solid rgba(232,41,58,0.2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600; color: var(--red); flex-shrink: 0; font-family: var(--mono);
+  }
+  h2 { font-size: 18px; font-weight: 500; color: #fff; letter-spacing: -.01em; }
+  h3 { font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 8px; }
+  p { color: var(--text2); margin-bottom: 12px; }
+
+  .arch { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 10px; padding: 24px; margin: 20px 0; }
+  .arch-flow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .arch-box { background: var(--bg3); border: 0.5px solid var(--border2); border-radius: 8px; padding: 10px 14px; text-align: center; min-width: 110px; }
+  .arch-box .ab-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 4px; }
+  .arch-box .ab-name { font-size: 12px; color: var(--text); font-weight: 500; }
+  .arch-box .ab-detail { font-size: 10px; color: var(--text3); margin-top: 2px; }
+  .arch-box.red { border-color: rgba(232,41,58,0.3); background: var(--red-dim); }
+  .arch-box.red .ab-name { color: var(--red); }
+  .arch-arrow { color: var(--text3); font-size: 16px; }
+
+  .file-grid { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+  .file-card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 9px; padding: 14px 16px; display: flex; gap: 14px; align-items: flex-start; transition: border-color .15s; }
+  .file-card:hover { border-color: var(--border2); }
+  .file-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; font-family: var(--mono); font-weight: 500; }
+  .file-icon.py { background: rgba(45,122,79,0.15); color: var(--green); border: 0.5px solid rgba(45,122,79,0.2); }
+  .file-icon.html { background: var(--red-dim); color: var(--red); border: 0.5px solid rgba(232,41,58,0.2); }
+  .file-icon.cfg { background: var(--amber-dim); color: var(--amber); border: 0.5px solid rgba(201,168,76,0.2); }
+  .file-icon.sql { background: rgba(91,155,213,0.15); color: #5b9bd5; border: 0.5px solid rgba(91,155,213,0.25); }
+  .file-name { font-size: 13px; font-weight: 500; color: #fff; font-family: var(--mono); margin-bottom: 4px; }
+  .file-role { font-size: 11px; color: var(--red); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+  .file-desc { font-size: 12px; color: var(--text2); line-height: 1.5; }
+  .file-warning { display: inline-flex; align-items: center; gap: 4px; background: rgba(201,168,76,0.1); border: 0.5px solid rgba(201,168,76,0.2); border-radius: 4px; padding: 2px 7px; font-size: 10px; color: var(--amber); margin-top: 6px; }
+
+  .steps { margin: 16px 0; }
+  .step { display: flex; gap: 14px; margin-bottom: 16px; align-items: flex-start; }
+  .step-num { width: 24px; height: 24px; border-radius: 6px; background: var(--bg3); border: 0.5px solid var(--border2); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: var(--red); flex-shrink: 0; font-family: var(--mono); margin-top: 2px; }
+  .step-content h4 { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
+  .step-content p { font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+
+  .data-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  .data-table th { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; padding: 8px 12px; text-align: left; border-bottom: 0.5px solid var(--border); font-weight: 400; }
+  .data-table td { padding: 10px 12px; border-bottom: 0.5px solid var(--bg3); font-size: 12px; color: var(--text2); vertical-align: top; }
+  .data-table td:first-child { color: var(--text); font-family: var(--mono); }
+  .data-table tr:last-child td { border-bottom: none; }
+
+  .alert { border-radius: 8px; padding: 12px 14px; margin: 16px 0; display: flex; gap: 10px; font-size: 12px; line-height: 1.6; }
+  .alert-icon { flex-shrink: 0; font-size: 14px; margin-top: 1px; }
+  .alert.warning { background: rgba(201,168,76,0.08); border: 0.5px solid rgba(201,168,76,0.2); color: #b09040; }
+  .alert.danger { background: rgba(232,41,58,0.08); border: 0.5px solid rgba(232,41,58,0.2); color: #c03040; }
+  .alert.info { background: var(--green-dim); border: 0.5px solid rgba(45,122,79,0.2); color: #3d9060; }
+
+  .service-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+  .service-card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 9px; padding: 16px; }
+  .service-name { font-size: 13px; font-weight: 500; color: #fff; margin-bottom: 4px; }
+  .service-url { font-size: 11px; color: #5b9bd5; font-family: var(--mono); margin-bottom: 8px; word-break: break-all; }
+  .service-detail { font-size: 11px; color: var(--text2); line-height: 1.6; }
+
+  .trouble-item { background: var(--bg2); border: 0.5px solid var(--border); border-radius: 8px; padding: 14px 16px; margin-bottom: 8px; }
+  .trouble-problem { font-size: 13px; color: var(--red); margin-bottom: 6px; font-weight: 500; }
+  .trouble-solution { font-size: 12px; color: var(--text2); }
+
+  .divider { border: none; border-top: 0.5px solid var(--border); margin: 40px 0; }
+  .tag { display: inline-block; background: var(--bg3); border: 0.5px solid var(--border2); border-radius: 4px; padding: 1px 7px; font-size: 10px; font-family: var(--mono); color: var(--text2); margin: 2px; }
+
+  code { font-family: var(--mono); background: var(--bg3); padding: 1px 5px; border-radius: 4px; font-size: 11.5px; color: var(--text); }
+
+  @media print { .sidebar { display: none; } .main { padding: 24px; } }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <svg class="logo-mark" viewBox="0 0 100 100" fill="none">
+      <polygon points="10,80 10,25 38,40 38,80" fill="#E8293A"/>
+      <polygon points="38,40 62,25 62,65 38,80" fill="#c0202e"/>
+      <polygon points="62,25 90,15 90,70 62,65" fill="#E8293A"/>
+    </svg>
+    <div><div class="logo-name">novalum</div><div class="logo-sub">Flujo de efectivo</div></div>
+  </div>
+
+  <div class="nav-section">
+    <span class="nav-label">Introducción</span>
+    <a class="nav-item active" href="#overview" onclick="setActive(this)"><div class="nav-dot"></div> Visión general</a>
+    <a class="nav-item" href="#arquitectura" onclick="setActive(this)"><div class="nav-dot"></div> Arquitectura</a>
+  </div>
+
+  <div class="nav-section">
+    <span class="nav-label">Archivos</span>
+    <a class="nav-item" href="#archivos" onclick="setActive(this)"><div class="nav-dot"></div> Estructura del proyecto</a>
+  </div>
+
+  <div class="nav-section">
+    <span class="nav-label">Base de datos</span>
+    <a class="nav-item" href="#tablas" onclick="setActive(this)"><div class="nav-dot"></div> Tablas en Neon</a>
+    <a class="nav-item" href="#conceptos" onclick="setActive(this)"><div class="nav-dot"></div> Conceptos clave</a>
+  </div>
+
+  <div class="nav-section">
+    <span class="nav-label">Operación</span>
+    <a class="nav-item" href="#servicios" onclick="setActive(this)"><div class="nav-dot"></div> Servicios y cuentas</a>
+    <a class="nav-item" href="#sap" onclick="setActive(this)"><div class="nav-dot"></div> Campos reales de SAP</a>
+  </div>
+
+  <div class="nav-section">
+    <span class="nav-label">Soporte</span>
+    <a class="nav-item" href="#no-tocar" onclick="setActive(this)"><div class="nav-dot"></div> Qué NO tocar</a>
+    <a class="nav-item" href="#troubleshooting" onclick="setActive(this)"><div class="nav-dot"></div> Troubleshooting</a>
+    <a class="nav-item" href="#pendiente" onclick="setActive(this)"><div class="nav-dot"></div> Ahora mismo / Pendiente</a>
+  </div>
+</nav>
+
+<main class="main">
+
+  <div class="hero" id="overview">
+    <div class="hero-badge">● En desarrollo — 5 Septiembre 2026</div>
+    <h1>Flujo de Efectivo<br><strong>Novalum</strong></h1>
+    <p>Sistema de flujo de caja por método directo, alimentado por SAP Business One y por los extractos bancarios reales (BHD y Popular). Nace porque las cuentas de balance en SAP están sucias — así que el efectivo real se arma cruzando tres fuentes: SAP (cobros/pagos/movimientos de caja), los PDF de banco, y la conciliación manual de lo ambiguo.</p>
+  </div>
+
+  <div class="section" id="arquitectura">
+    <div class="section-header"><div class="section-num">01</div><h2>Arquitectura del sistema</h2></div>
+
+    <div class="arch">
+      <div class="arch-flow">
+        <div class="arch-box red"><div class="ab-label">Origen 1</div><div class="ab-name">SAP B1</div><div class="ab-detail">SQL Server · novalum00</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box red"><div class="ab-label">Sync (tu PC)</div><div class="ab-name">sync_flujo.py</div><div class="ab-detail">VPN activa</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box"><div class="ab-label">Base de datos</div><div class="ab-name">Neon PostgreSQL</div><div class="ab-detail">Nube</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box"><div class="ab-label">Servidor</div><div class="ab-name">FastAPI / Render</div><div class="ab-detail">main.py</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box red"><div class="ab-label">Usuario</div><div class="ab-name">Browser</div><div class="ab-detail">login/dashboard</div></div>
+      </div>
+    </div>
+    <div class="arch">
+      <div class="arch-flow">
+        <div class="arch-box"><div class="ab-label">Origen 2</div><div class="ab-name">Extractos PDF</div><div class="ab-detail">BHD + Popular</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box"><div class="ab-label">Subida</div><div class="ab-name">Backoffice web</div><div class="ab-detail">parser_bhd.py</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box red"><div class="ab-label">Tabla</div><div class="ab-name">movimientos_banco</div><div class="ab-detail">Neon</div></div>
+      </div>
+    </div>
+
+    <div class="alert info">
+      <span class="alert-icon">💡</span>
+      <span>Repositorio: <strong>github.com/Novaluxedo/CashFlow</strong>. Deploy: <strong>Render</strong> (no Railway — se confirmó tras una confusión de UI). Base de datos: <strong>Neon</strong> (se evaluó el Postgres propio de Render, pero se quedó en Neon).</span>
+    </div>
+    <div class="alert warning">
+      <span class="alert-icon">⚠</span>
+      <span><strong>sync_flujo.py y sap_conn.py nunca se suben a GitHub</strong> (gitignored) — contienen o requieren las credenciales de SAP. Solo corren en la PC local con VPN activa.</span>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <div class="section" id="archivos">
+    <div class="section-header"><div class="section-num">02</div><h2>Estructura del proyecto</h2></div>
+    <p>Todo vive en <code>CashFlow/</code>, raíz del repo.</p>
+
+    <div class="file-grid">
+      <div class="file-card">
+        <div class="file-icon py">py</div>
+        <div><div class="file-name">main.py</div><div class="file-role">Backend FastAPI — corre en Render</div>
+        <div class="file-desc">Sirve el frontend (public/) y monta los routers. Orden crítico: <code>include_router(...)</code> siempre antes de <code>app.mount("/", StaticFiles...)</code> — si no, el mount intercepta todo y da 405 en los endpoints /api/*.</div></div>
+      </div>
+      <div class="file-card">
+        <div class="file-icon py">py</div>
+        <div><div class="file-name">db.py</div><div class="file-role">Conexión a Neon</div>
+        <div class="file-desc">SQLAlchemy engine + <code>get_db()</code> dependency + <code>SessionLocal</code>. Lee <code>NEON_URL</code> del .env.</div></div>
+      </div>
+      <div class="file-card">
+        <div class="file-icon py">py</div>
+        <div><div class="file-name">security.py</div><div class="file-role">Hash de contraseñas + JWT</div>
+        <div class="file-desc">bcrypt (fijado a <code>bcrypt==4.0.1</code> por incompatibilidad con passlib) + jose para tokens. Lee <code>DASHBOARD_SECRET</code>.</div></div>
+      </div>
+      <div class="file-card">
+        <div class="file-icon py">py</div>
+        <div><div class="file-name">sap_conn.py</div><div class="file-role">Conexión a SAP B1 (SQL Server)</div>
+        <div class="file-desc">pyodbc, lee credenciales DB_DRIVER/DB_SERVER/DB_DATABASE/DB_USERNAME/DB_PASSWORD del .env. Sí se sube a git (no tiene secretos hardcodeados).</div></div>
+      </div>
+      <div class="file-card">
+        <div class="file-icon py">py</div>
+        <div><div class="file-name">sync_flujo.py</div><div class="file-role">Sync SAP → Neon — SOLO tu PC, gitignored</div>
+        <div class="file-desc">4 pasos en cadena: plan_cuentas, cobros (ORCT), pagos (OVPM), movimientos_caja (JDT1, filtrado a <code>CUENTAS_BANCO_CAJA</code>). Usa <code>execute_values</code> de psycopg2 para inserción masiva (segundos, no minutos). Filtra por <code>FECHA_DESDE = "2026-01-01"</code> — ajustable. Es seguro re-correr (ON CONFLICT DO UPDATE en todo).</div></div>
+      </div>
+      <div class="file-card">
+        <div class="file-icon py">py</div>
+        <div><div class="file-name">parser_bhd.py</div><div class="file-role">Extracción de PDF de BHD</div>
+        <div class="file-desc">pdfplumber + tablas. Validado 8/8 contra extractos reales — autovalida que la suma de movimientos cuadre con los totales que declara el PDF, si no, lanza <code>ErrorParseoBHD</code>.</div>
+        <div class="file-warning">⚠ parser_popular.py NO existe todavía</div></div>
+      </div>
+      <div class="file-card">
+        <div class="file-icon py">py</div>
+        <div><div class="file-name">reglas_conciliacion.py</div><div class="file-role">Clasificación automática</div>
+        <div class="file-desc"><code>clasificar_estado_inicial()</code>: confirmado por defecto, excepto códigos de movimiento 077/481/C86/C56 o descripción con "divisas"/"via lbtr"/"trans.devuelta" → por_conciliar. <code>sugerir_conversion_divisas()</code> y <code>sugerir_transferencias_internas()</code> corren después de cada carga y solo sugieren (nunca cambian estado solas).</div></div>
+      </div>
+      <div class="file-card">
+        <div class="file-icon py">py</div>
+        <div><div class="file-name">routers/auth.py, backoffice.py, extractos.py, conciliacion.py, flujo_caja.py, validacion.py</div><div class="file-role">Endpoints /api/*</div>
+        <div class="file-desc">Roles: admin, contabilidad, ejecutivo. <code>requiere_rol(...)</code> y <code>usuario_actual</code> como dependencies.</div></div>
+      </div>
+      <div class="file-card">
+        <div class="file-icon html">html</div>
+        <div><div class="file-name">public/login.html, backoffice.html, index.html</div><div class="file-role">Frontend — HTML plano, sin build step</div>
+        <div class="file-desc">Mismo sistema de diseño que este documento (fondo negro, rojo #E8293A, dorado #c9a84c, IBM Plex). index.html = dashboard de flujo de caja (KPIs, confiabilidad, tendencia, excluidos). backoffice.html = cuentas bancarias, cargar extractos, por conciliar, validación SAP vs banco.</div></div>
+      </div>
+      <div class="file-card">
+        <div class="file-icon py">py</div>
+        <div><div class="file-name">seed_y_cargar.py</div><div class="file-role">Carga masiva de PDF, uso puntual</div>
+        <div class="file-desc">Siembra las 4 cuentas conocidas + carga todos los PDF de BHD de una carpeta local. Ya se corrió: 1,536 movimientos cargados, 8/8 archivos BHD cuadraron exacto.</div></div>
+      </div>
+      <div class="file-card">
+        <div class="file-icon py">py</div>
+        <div><div class="file-name">backfill_clasificacion.py</div><div class="file-role">Uso de una sola vez, ya corrido</div>
+        <div class="file-desc">Reclasificó los 1,520 movimientos que habían quedado en por_conciliar por el default viejo del schema. Resultado: 1,441 → confirmado, 79 se quedaron por_conciliar (5.2%, patrón sano).</div></div>
+      </div>
+      <div class="file-card">
+        <div class="file-icon py">py</div>
+        <div><div class="file-name">validar_sap_banco.py</div><div class="file-role">Script CLI equivalente a routers/validacion.py</div>
+        <div class="file-desc">Mismo cálculo que el endpoint, pero por consola. Se mantiene como alternativa de diagnóstico rápido.</div></div>
+      </div>
+      <div class="file-card">
+        <div class="file-icon sql">sql</div>
+        <div><div class="file-name">01_schema_inicial.sql</div><div class="file-role">Ya corrido en Neon</div>
+        <div class="file-desc">Todas las tablas + catálogo de 47 bancos de la Superintendencia de Bancos RD precargado.</div></div>
+      </div>
+      <div class="file-card">
+        <div class="file-icon sql">sql</div>
+        <div><div class="file-name">02_vincular_cuentas_sap.sql</div><div class="file-role">Ya corrido en Neon</div>
+        <div class="file-desc">Agrega <code>sap_acct_code</code> a cuentas_bancarias y vincula las 4 cuentas con extracto a su código contable real de SAP.</div></div>
+      </div>
+      <div class="file-card">
+        <div class="file-icon cfg">.env</div>
+        <div><div class="file-name">.env</div><div class="file-role">Nunca a GitHub</div>
+        <div class="file-desc">NEON_URL, DASHBOARD_SECRET, DB_DRIVER/DB_SERVER/DB_DATABASE/DB_USERNAME/DB_PASSWORD (SAP).</div></div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <div class="section" id="tablas">
+    <div class="section-header"><div class="section-num">03</div><h2>Tablas en Neon</h2></div>
+    <table class="data-table">
+      <thead><tr><th>Tabla</th><th>Qué guarda</th><th>La llena</th></tr></thead>
+      <tbody>
+        <tr><td>catalogo_bancos</td><td>47 entidades de la SB RD (bancos, asociaciones, corp. de crédito)</td><td>Schema (precargado)</td></tr>
+        <tr><td>cuentas_bancarias</td><td>Las 4 cuentas reales + sap_acct_code vinculado</td><td>Backoffice / seed_y_cargar.py</td></tr>
+        <tr><td>usuarios</td><td>Login, rol (admin/contabilidad/ejecutivo)</td><td>crear_admin.py</td></tr>
+        <tr><td>plan_cuentas</td><td>460 cuentas contables de SAP (OACT)</td><td>sync_flujo.py</td></tr>
+        <tr><td>cobros</td><td>15,501 incoming payments desde 2026-01-01 (ORCT)</td><td>sync_flujo.py</td></tr>
+        <tr><td>pagos</td><td>179 outgoing payments desde 2026-01-01 (OVPM)</td><td>sync_flujo.py</td></tr>
+        <tr><td>movimientos_caja</td><td>10,357 líneas de asiento (JDT1), solo cuentas de banco/caja</td><td>sync_flujo.py</td></tr>
+        <tr><td>movimientos_banco</td><td>1,536 movimientos de extractos BHD (8/8 archivos, mayo-agosto 2026)</td><td>Backoffice / seed_y_cargar.py</td></tr>
+        <tr><td>tasas_cambio_bcrd</td><td>Tasas oficiales BCRD — <strong>vacía todavía</strong></td><td>Pendiente de construir</td></tr>
+        <tr><td>sync_log</td><td>Historial de cada corrida de sync_flujo.py</td><td>sync_flujo.py</td></tr>
+        <tr><td>mapeo_cuentas</td><td>Clasificación operativo/inversión/financiamiento — <strong>vacía todavía</strong></td><td>Pendiente de construir</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr class="divider">
+
+  <div class="section" id="conceptos">
+    <div class="section-header"><div class="section-num">04</div><h2>Conceptos clave del proyecto</h2></div>
+    <table class="data-table">
+      <tbody>
+        <tr><td>Por qué no se usa el saldo de SAP</td><td>Las cuentas de balance en SAP tienen el <strong>saldo inicial</strong> sucio (histórico), no los movimientos del período. Por eso el flujo se arma desde documentos (cobros/pagos/extractos), no desde el saldo contable.</td></tr>
+        <tr><td>estado_conciliacion</td><td><code>confirmado</code> (por defecto, salvo patrón ambiguo) / <code>transferencia_interna</code> / <code>conversion_divisas</code> / <code>por_conciliar</code>. Solo un humano puede pasar algo a los primeros tres vía POST /api/conciliacion/{id}/resolver.</td></tr>
+        <tr><td>Patrones ambiguos conocidos (evidencia real)</td><td>Códigos de movimiento <code>077</code>/<code>481</code> (Venta Divisas BHD) y <code>C86</code>/<code>C56</code> (créditos "ORD: NOVALUM..." sin cruzar) + descripciones con "divisas", "via lbtr", "trans.devuelta".</td></tr>
+        <tr><td>Conversión de divisas confirmada</td><td>RD$69,075,000 → US$1,175,000 en BHD, mayo-agosto 2026 (7 pares, mismo Ref. en ambas monedas).</td></tr>
+        <tr><td>Transferencias internas confirmadas</td><td>RD$24,300,000 + US$30,000 movidos entre Popular y BHD (LBTR), mismo monto y fecha en ambos lados.</td></tr>
+        <tr><td>Tasa BCRD para consolidar</td><td><strong>Se abandonó el consolidado único vía tasa BCRD.</strong> El dashboard ahora muestra dos balances independientes — USD y RD$, sin conversión — cada uno clicable para ver el detalle por banco. <code>tasas_cambio_bcrd</code> sigue sin usarse en el reporte actual.</td></tr>
+        <tr><td>Método directo — pivote importante</td><td>Se intentó primero clasificar <code>movimientos_caja</code> (JDT1) por cuenta contrapartida vía <code>mapeo_cuentas</code> (operativo/inversión/financiamiento) — el usuario lo rechazó por requerir clasificación manual cuenta por cuenta. <strong>Se reemplazó por el desglose de <code>cobros.forma_cobro</code> / <code>pagos.forma_pago</code></strong> (efectivo/transferencia/tarjeta/cheque) — cero clasificación manual, ya disponible desde el primer sync. <code>routers/mapeo.py</code> y la pestaña "Clasificar cuentas" quedaron construidos pero sin conectar al reporte actual.</td></tr>
+        <tr><td>Cuentas SAP sin extracto todavía</td><td>Popular RD$ 787-155779, Popular USD$ 751-545187, Banco Santa Cruz (RD$/USD$), Asociación Popular RD$ — existen en SAP pero no se han cargado sus PDF.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr class="divider">
+
+  <div class="section" id="servicios">
+    <div class="section-header"><div class="section-num">05</div><h2>Servicios y cuentas</h2></div>
+    <div class="service-grid">
+      <div class="service-card">
+        <div class="service-name">GitHub</div>
+        <div class="service-url">github.com/Novaluxedo/CashFlow</div>
+        <div class="service-detail">Repo privado. Push a main → Render redeploya solo.</div>
+      </div>
+      <div class="service-card">
+        <div class="service-name">Render</div>
+        <div class="service-url">cashflow-lgq2.onrender.com</div>
+        <div class="service-detail">Proyecto "Cash-Flow" (usa el sistema nuevo de Projects/Environments de Render). Root Directory: vacío. Start: <code>uvicorn main:app --host 0.0.0.0 --port $PORT</code>.</div>
+      </div>
+      <div class="service-card">
+        <div class="service-name">Neon</div>
+        <div class="service-url">console.neon.tech</div>
+        <div class="service-detail">PostgreSQL. Usuario real: <code>neondb_owner</code> (nunca "postgresql", ese es solo el prefijo del protocolo).</div>
+      </div>
+      <div class="service-card">
+        <div class="service-name">SAP B1</div>
+        <div class="service-url">novalum00 / SBO_NOVALUM</div>
+        <div class="service-detail">SQL Server, ODBC Driver 17. Requiere VPN activa desde la PC que corre sync_flujo.py.</div>
+      </div>
+    </div>
+    <h3 style="margin-top:20px">Usuario Admin</h3>
+    <p>Username: <code>Elieldjimenez</code> (rol admin). Creado con <code>crear_admin.py</code>. Roles disponibles: admin, contabilidad, ejecutivo — <code>requiere_rol()</code> en cada endpoint sensible.</p>
+  </div>
+
+  <hr class="divider">
+
+  <div class="section" id="sap">
+    <div class="section-header"><div class="section-num">06</div><h2>Campos reales de SAP confirmados (no asumir el estándar)</h2></div>
+    <p>Esta instalación de SAP B1 difiere del esquema estándar en varios campos. Ya corregidos en <code>sync_flujo.py</code>:</p>
+    <table class="data-table">
+      <thead><tr><th>Tabla</th><th>Campo esperado (estándar)</th><th>Campo real en esta instalación</th></tr></thead>
+      <tbody>
+        <tr><td>OVPM / ORCT</td><td>DocCur</td><td><code>DocCurr</code></td></tr>
+        <tr><td>OVPM / ORCT</td><td>TransRef</td><td><code>TrsfrRef</code></td></tr>
+        <tr><td>OACT</td><td>AcctType, Locked</td><td><strong>No existen</strong> — se omiten, acct_type queda NULL, activo siempre TRUE</td></tr>
+        <tr><td>OACT</td><td>AcctName</td><td>Puede venir <code>NULL</code> en cuentas reales (ej. 1110320) — se usa AcctCode como respaldo</td></tr>
+        <tr><td>JDT1</td><td>Memo</td><td><code>LineMemo</code></td></tr>
+        <tr><td>OVPM</td><td>CheckNum a nivel de encabezado</td><td>No se encontró — numero_cheque queda NULL por ahora</td></tr>
+      </tbody>
+    </table>
+    <h3 style="margin-top:20px">Cuentas de banco/caja reales (CUENTAS_BANCO_CAJA en sync_flujo.py)</h3>
+    <table class="data-table">
+      <tbody>
+        <tr><td>1110101 / 1110103</td><td>Fondo Caja Principal / Caja General Otros</td></tr>
+        <tr><td>1110202 / 1110203</td><td>Caja Chica - 1 / Caja Chica - 2</td></tr>
+        <tr><td>1110311</td><td>BANCO BHD RD$ → vinculado a cuentas_bancarias (15469770020)</td></tr>
+        <tr><td>1110313</td><td>BANCO BHD USD$ → vinculado a cuentas_bancarias (15469770011)</td></tr>
+        <tr><td>1110317</td><td>BANCO POPULAR RD$ → vinculado a cuentas_bancarias (807203187)</td></tr>
+        <tr><td>1110318</td><td>BANCO POPULAR USD$ → vinculado a cuentas_bancarias (807405949)</td></tr>
+        <tr><td>1110312 / 1110314 / 1110319 / 110320 / 1110321</td><td>Bancos activos SIN extracto cargado todavía (Popular viejas, Santa Cruz, Asociación Popular)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr class="divider">
+
+  <div class="section" id="no-tocar">
+    <div class="section-header"><div class="section-num">07</div><h2>Qué NO tocar / reglas fijas</h2></div>
+    <table class="data-table">
+      <tbody>
+        <tr><td>Orden en main.py</td><td><code>include_router(...)</code> SIEMPRE antes de <code>app.mount("/", StaticFiles...)</code>. Al revés = 405 Method Not Allowed en todo /api/*.</td></tr>
+        <tr><td>.gitignore</td><td>Debe llamarse exactamente <code>.gitignore</code> (con el punto) — un typo aquí ya causó que <code>.env</code> se subiera a git una vez.</td></tr>
+        <tr><td>Carpetas en minúscula</td><td><code>public/</code> y <code>routers/</code> siempre en minúscula — Windows no distingue mayúsculas pero Render (Linux) sí.</td></tr>
+        <tr><td>sync_flujo.py y sap_conn.py con credenciales</td><td>Nunca a git. sap_conn.py sí se sube (no tiene secretos hardcodeados, lee de .env), sync_flujo.py NO.</td></tr>
+        <tr><td>movimientos_banco usa DO NOTHING</td><td>A propósito — un extracto ya cargado no debe cambiar nunca. cobros/pagos/plan_cuentas SÍ usan DO UPDATE porque SAP puede editar documentos legítimamente.</td></tr>
+        <tr><td>bcrypt fijado a 4.0.1</td><td>passlib se rompe con bcrypt 4.1+ (bug conocido, falta <code>__about__.__version__</code>).</td></tr>
+        <tr><td>UNIQUE de movimientos_banco</td><td><code>(cuenta_id, fecha, referencia, debito, credito, saldo)</code> — no solo referencia, porque Popular a veces repite referencia="0" varias veces el mismo día.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr class="divider">
+
+  <div class="section" id="troubleshooting">
+    <div class="section-header"><div class="section-num">08</div><h2>Troubleshooting — problemas ya resueltos</h2></div>
+
+    <div class="trouble-item">
+      <div class="trouble-problem">"Method Not Allowed" (405) en /api/auth/login</div>
+      <div class="trouble-solution">app.mount("/", StaticFiles...) estaba antes de app.include_router(...) en main.py, o el deploy en Render no tenía los cambios más recientes (faltaba git push).</div>
+    </div>
+    <div class="trouble-item">
+      <div class="trouble-problem">ModuleNotFoundError: No module named 'db' / 'routers'</div>
+      <div class="trouble-solution">Archivos nuevos (db.py, backoffice.py, extractos.py, conciliacion.py, flujo_caja.py, validacion.py) quedaban sueltos en la raíz del proyecto en vez de en routers/ — patrón MUY recurrente. Siempre correr `git status` antes de asumir que algo se subió.</div>
+    </div>
+    <div class="trouble-item">
+      <div class="trouble-problem">Root Directory "main.py" does not exist (Render)</div>
+      <div class="trouble-solution">En Settings del servicio, Root Directory debe ir vacío (main.py está en la raíz del repo), no el nombre del archivo.</div>
+    </div>
+    <div class="trouble-item">
+      <div class="trouble-problem">Traza de error muestra rutas de otro proyecto (NovalumDashboard\.venv)</div>
+      <div class="trouble-solution">El venv de CashFlow nunca se había creado realmente (el "(.venv)" del prompt era de una sesión vieja). Solución: `python -m venv .venv` DENTRO de la carpeta CashFlow, confirmar con `Test-Path .venv\Scripts\python.exe`.</div>
+    </div>
+    <div class="trouble-item">
+      <div class="trouble-problem">password authentication failed for user 'postgresql'</div>
+      <div class="trouble-solution">NEON_URL mal copiado — el prefijo "postgresql://" se duplicó, o quedó como "postgresql:" sin las dos barras. Siempre copiar el connection string completo directo del botón "Connect" en Neon, sin editar a mano.</div>
+    </div>
+    <div class="trouble-item">
+      <div class="trouble-problem">password cannot be longer than 72 bytes (bcrypt)</div>
+      <div class="trouble-solution">Bug de compatibilidad passlib + bcrypt 4.1+. Fijar `bcrypt==4.0.1` en requirements.txt.</div>
+    </div>
+    <div class="trouble-item">
+      <div class="trouble-problem">value too long for type character varying(20)</div>
+      <div class="trouble-solution">estado_conciliacion y sugerencia_auto eran VARCHAR(20), pero "transferencia_interna" tiene 21 caracteres. ALTER TABLE ... TYPE VARCHAR(30).</div>
+    </div>
+    <div class="trouble-item">
+      <div class="trouble-problem">Invalid column name 'X' (SAP)</div>
+      <div class="trouble-solution">Esta instalación de SAP difiere del estándar en varios campos — ver sección "Campos reales de SAP" arriba. Si aparece uno nuevo, pedir `SELECT TOP 5 * FROM TABLA` (con nombre real de tabla) para ver los campos reales antes de adivinar.</div>
+    </div>
+    <div class="trouble-item">
+      <div class="trouble-problem">Sync de SAP muy lento / parece "congelado"</div>
+      <div class="trouble-solution">Insertar fila por fila contra Neon (remoto) es lento con miles de filas. Solución: `psycopg2.extras.execute_values` en bloques de 1000 (implementado en sync_flujo.py). También se agregó FECHA_DESDE para no traer 10 años de historial de una vez.</div>
+    </div>
+    <div class="trouble-item">
+      <div class="trouble-problem">Confusión Render vs Railway</div>
+      <div class="trouble-solution">Render lanzó una función nueva "Projects and Environments" (con pestañas Production/Staging, Env Groups) después del corte de conocimiento del modelo — visualmente parece Railway pero es Render real. Verificar siempre por la URL del navegador si hay duda.</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <div class="section" id="pendiente">
+    <div class="section-header"><div class="section-num">09</div><h2>Ahora mismo / Qué sigue</h2></div>
+
+    <div class="alert danger">
+      <span class="alert-icon">🔴</span>
+      <span><strong>El método directo actual está incompleto conceptualmente — se reconoce explícitamente y hay que reconstruirlo.</strong> Lo construido hoy (<code>cobros</code> + <code>pagos</code> por forma de cobro/pago) solo cubre la porción de Operativo que pasa por los módulos formales de SAP (ORCT/OVPM). Nómina, impuestos, intereses, préstamos, compra de activos — todo lo que SAP registra como asiento contable directo — queda completamente afuera. No es un hueco menor, faltan categorías enteras (Inversión y Financiamiento no existen en el reporte actual).</span>
+    </div>
+
+    <div class="alert info">
+      <span class="alert-icon">✓</span>
+      <span><strong>Concepto correcto, ya acordado con el usuario — construir esto en el próximo chat:</strong>
+      <table class="data-table" style="margin-top:10px">
+        <thead><tr><th>Sección</th><th>Líneas típicas</th></tr></thead>
+        <tbody>
+          <tr><td>Operativo</td><td>Cobros de clientes, pagos a proveedores, pagos de nómina, pago de impuestos, intereses pagados, gastos operativos varios</td></tr>
+          <tr><td>Inversión</td><td>Compra/venta de activos fijos, inversiones</td></tr>
+          <tr><td>Financiamiento</td><td>Préstamos recibidos, pago de préstamos, aportes/retiros de capital</td></tr>
+        </tbody>
+      </table>
+      <strong>Enfoque:</strong> <code>movimientos_caja</code> (ya trae <code>contrapartida_acct</code>) es la fuente completa — todo lo que tocó una cuenta de banco/caja pasa por ahí sin excepción. <code>cobros</code>/<code>pagos</code> quedan como el <em>detalle</em> de la porción que ya se sabe clasificar sola (por forma de cobro/pago). Para el resto, <strong>reglas automáticas por patrón</strong> en vez de pedir clasificar las 460 cuentas a mano (esto fue lo que se rechazó antes y hay que evitar repetir):
+      <ul style="margin:8px 0 0 20px;color:var(--text2)">
+        <li>Cuentas con "NOMINA" en el nombre → Operativo / Nómina</li>
+        <li><code>22101 Prestamos de Bancos Locales</code> → Financiamiento</li>
+        <li>Cuentas de activo fijo (por rango en <code>plan_cuentas</code>) → Inversión</li>
+        <li>Movimientos ya cubiertos por <code>cobros</code>/<code>pagos</code> (mismo TransId) → no duplicar, ya están clasificados</li>
+        <li>Solo lo verdaderamente ambiguo → cola de revisión manual, igual que "por_conciliar" en bancos</li>
+      </ul>
+      </span>
+    </div>
+
+    <h3 style="margin-top:20px">Pendientes conocidos, en orden sugerido</h3>
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-content"><h4>Reconstruir el método directo con el concepto completo</h4><p>Ver alerta verde arriba — es la prioridad al abrir el chat nuevo.</p></div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-content"><h4>Manejar 401 con redirect automatico a login</h4><p>En vez de que el dashboard truene con "periodos.map is not a function" cuando el token vence.</p></div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-content"><h4>Revisar los ~79 movimientos "por_conciliar" reales</h4><p>Confirmar o reclasificar manualmente desde Backoffice → Por conciliar.</p></div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-content"><h4>Escribir parser_popular.py</h4><p>Las 8 PDF de Popular siguen sin cargarse.</p></div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-content"><h4>Correr validar_sap_banco.py / la pestaña Validación SAP con datos reales</h4><p>Ver qué tan bien cuadran cobros/pagos de SAP contra los extractos de banco.</p></div></div>
+      <div class="step"><div class="step-num">6</div><div class="step-content"><h4>Cargar extractos de las 5 cuentas SAP sin PDF todavía</h4><p>Popular 787-155779, Popular 751-545187, Santa Cruz RD$/USD$, Asociación Popular.</p></div></div>
+      <div class="step"><div class="step-num">7</div><div class="step-content"><h4>Task Scheduler diario para sync_flujo.py</h4><p>Igual que Novalum — automatizar la corrida en vez de correrla a mano.</p></div></div>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<script>
+function setActive(el) {
+  document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+}
+const sections = document.querySelectorAll('.section, .hero');
+const navItems = document.querySelectorAll('.nav-item');
+window.addEventListener('scroll', () => {
+  let current = '';
+  sections.forEach(s => { if (window.scrollY >= s.offsetTop - 60) current = s.id; });
+  navItems.forEach(item => {
+    item.classList.remove('active');
+    if (item.getAttribute('href') === '#' + current) item.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>
