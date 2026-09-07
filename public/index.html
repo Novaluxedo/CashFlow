@@ -126,7 +126,7 @@
       <div class="nota">Cobros reales del mes, convertidos a USD con la tasa real de cada cobro — puede incluir cobro de facturas de meses anteriores.</div>
     </div>
 
-    <h3 style="margin-top:20px;font-size:12.5px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em">Validación contra estado de banco real (BHD)</h3>
+    <h3 style="margin-top:20px;font-size:12.5px;color:var(--text2);text-transform:uppercase;letter-spacing:.05em">Validación contra estado de banco real (BHD + Popular)</h3>
     <table style="margin-top:8px">
       <thead>
         <tr><th>Moneda</th><th class="num">Cobros (sistema)</th><th class="num">Banco confirmado</th><th class="num">Diferencia</th><th>Estado</th></tr>
@@ -134,8 +134,8 @@
       <tbody id="tabla-validacion-banco"><tr><td colspan="5" class="empty">Cargando…</td></tr></tbody>
     </table>
     <p style="font-size:11px;color:var(--text3);margin-top:10px">
-      Sin convertir monedas — cada una comparada contra su propio extracto. Solo BHD tiene estados de cuenta cargados por ahora
-      (Popular todavía no tiene parser). Si un mes no tiene extracto BHD cargado, se muestra explícitamente en vez de un cuadre falso.
+      Sin convertir monedas — cada una comparada contra su propio extracto, sumando BHD y Popular.
+      Si un mes no tiene extracto cargado en ninguno de los dos bancos, se muestra explícitamente en vez de un cuadre falso.
     </p>
   </div>
 
@@ -257,7 +257,7 @@ async function cargarValidacionBanco(periodo) {
         <tr>
           <td class="strong">${moneda}</td>
           <td class="num strong">${formatearMonto(v.cobros_usd_o_rd, simbolo)}</td>
-          <td class="num" colspan="2">Sin extracto BHD cargado este mes</td>
+          <td class="num" colspan="2">Sin extracto cargado este mes</td>
           <td><span class="badge" style="color:var(--text3);background:var(--bg3)">Sin dato</span></td>
         </tr>`;
     }

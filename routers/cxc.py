@@ -314,22 +314,19 @@ def validacion_banco(
 ):
     """
     Valida la Metrica 1 (Efectivo Cobrado) contra el estado de banco REAL,
-    sin convertir monedas - cada una en la suya. Solo BHD tiene extractos
-    cargados por ahora (parser_popular.py todavia no existe).
+    sin convertir monedas - cada una en la suya. Suma BHD + Popular, ya
+    que ambos tienen extractos cargados (parser_bhd.py y parser_popular.py).
 
     Nota tecnica: el filtro `estado_conciliacion = 'confirmado'` ya excluye
     por si solo los estados 'transferencia_interna'/'conversion_divisas'
-    (son valores finales distintos, no una sub-categoria de 'confirmado') -
-    asi que ese no era el problema real. El problema real es que la
-    deteccion automatica de transferencia interna (reglas_conciliacion.py)
-    solo funciona cuando AMBOS lados de la transferencia estan en
-    movimientos_banco - si el dinero viene de una cuenta Popular (sin
-    parser todavia) hacia BHD, el sistema nunca ve el debito y la
-    transferencia se queda mal clasificada como 'confirmado' normal. Este
-    endpoint marca esos casos como sospechosos (nombre propio de la
-    empresa en la descripcion, sin sugerencia_auto) en vez de ocultarlos,
-    pero no los excluye automaticamente - requiere revision manual en
-    Backoffice.
+    (son valores finales distintos, no una sub-categoria de 'confirmado').
+    El riesgo real que si vale la pena vigilar es la deteccion automatica
+    de transferencia interna (reglas_conciliacion.py), que depende de ver
+    AMBOS lados de la transferencia en movimientos_banco - con Popular ya
+    cargado esto deberia funcionar mejor que antes (cuando Popular no
+    existia y cualquier transferencia BHD<->Popular era invisible de un
+    lado), pero el chequeo de "sospechosas" se deja activo por si acaso
+    igual queda algun caso sin detectar.
     """
     anio, mes = (int(p) for p in periodo.split("-"))
     parametros = {"anio": anio, "mes": mes}
@@ -341,8 +338,7 @@ def validacion_banco(
                    COUNT(*) AS filas
             FROM movimientos_banco m
             JOIN cuentas_bancarias c ON c.id = m.cuenta_id
-            WHERE c.banco_codigo = 'BHD'
-              AND EXTRACT(YEAR FROM m.fecha) = :anio AND EXTRACT(MONTH FROM m.fecha) = :mes
+            WHERE EXTRACT(YEAR FROM m.fecha) = :anio AND EXTRACT(MONTH FROM m.fecha) = :mes
               AND m.estado_conciliacion = 'confirmado'
             GROUP BY c.moneda
         """),
@@ -354,8 +350,7 @@ def validacion_banco(
             SELECT c.moneda, COUNT(*) AS filas, SUM(m.credito) AS monto
             FROM movimientos_banco m
             JOIN cuentas_bancarias c ON c.id = m.cuenta_id
-            WHERE c.banco_codigo = 'BHD'
-              AND EXTRACT(YEAR FROM m.fecha) = :anio AND EXTRACT(MONTH FROM m.fecha) = :mes
+            WHERE EXTRACT(YEAR FROM m.fecha) = :anio AND EXTRACT(MONTH FROM m.fecha) = :mes
               AND m.estado_conciliacion = 'por_conciliar'
               AND m.credito > 0
             GROUP BY c.moneda
@@ -369,8 +364,7 @@ def validacion_banco(
             SELECT c.moneda, COUNT(*) AS filas
             FROM movimientos_banco m
             JOIN cuentas_bancarias c ON c.id = m.cuenta_id
-            WHERE c.banco_codigo = 'BHD'
-              AND EXTRACT(YEAR FROM m.fecha) = :anio AND EXTRACT(MONTH FROM m.fecha) = :mes
+            WHERE EXTRACT(YEAR FROM m.fecha) = :anio AND EXTRACT(MONTH FROM m.fecha) = :mes
             GROUP BY c.moneda
         """),
         parametros,
@@ -378,14 +372,14 @@ def validacion_banco(
 
     # Sospechosas: confirmado, sin sugerencia_auto, pero con el nombre de la
     # propia empresa en la descripcion - candidato a transferencia interna
-    # cross-bank (BHD <-> Popular) que la deteccion automatica no atrapo.
+    # que la deteccion automatica no atrapo (ya sea por un lado en un banco
+    # sin extracto de ese periodo, o algun otro caso no cubierto por las reglas).
     sospechosas = db.execute(
         text("""
             SELECT c.moneda, COUNT(*) AS filas, SUM(m.credito) AS monto
             FROM movimientos_banco m
             JOIN cuentas_bancarias c ON c.id = m.cuenta_id
-            WHERE c.banco_codigo = 'BHD'
-              AND EXTRACT(YEAR FROM m.fecha) = :anio AND EXTRACT(MONTH FROM m.fecha) = :mes
+            WHERE EXTRACT(YEAR FROM m.fecha) = :anio AND EXTRACT(MONTH FROM m.fecha) = :mes
               AND m.estado_conciliacion = 'confirmado'
               AND m.sugerencia_auto IS NULL
               AND m.descripcion ILIKE '%NOVALUM%'
