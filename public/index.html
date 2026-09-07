@@ -133,6 +133,7 @@
       </thead>
       <tbody id="tabla-validacion-banco"><tr><td colspan="5" class="empty">Cargando…</td></tr></tbody>
     </table>
+    <div id="consolidado-usd-banco" style="margin-top:14px"></div>
     <p style="font-size:11px;color:var(--text3);margin-top:10px">
       Sin convertir monedas — cada una comparada contra su propio extracto, sumando BHD y Popular.
       Si un mes no tiene extracto cargado en ninguno de los dos bancos, se muestra explícitamente en vez de un cuadre falso.
@@ -281,6 +282,23 @@ async function cargarValidacionBanco(periodo) {
   });
 
   document.getElementById('tabla-validacion-banco').innerHTML = filas.join('');
+
+  const consolidadoBox = document.getElementById('consolidado-usd-banco');
+  if (data.consolidado_usd) {
+    const c = data.consolidado_usd;
+    const okConsolidado = Math.abs(c.diferencia_total_usd) < 1;
+    consolidadoBox.innerHTML = `
+      <div class="kpi-box">
+        <div class="label">Consolidado en USD (tasa BCRD del ${c.fecha_tasa}: ${c.tasa_bcrd_usada})</div>
+        <div style="font-size:13px;font-family:var(--mono);margin-top:6px">
+          Cobros: ${formatearMonto(c.cobros_total_usd, 'USD')} — Banco: ${formatearMonto(c.banco_total_usd, 'USD')} —
+          Diferencia: <span style="color:${okConsolidado ? '#4caf7a' : 'var(--red)'}">${formatearMonto(c.diferencia_total_usd, 'USD')}</span>
+        </div>
+        <div class="nota">${c.nota}</div>
+      </div>`;
+  } else {
+    consolidadoBox.innerHTML = '<p style="font-size:11px;color:var(--text3)">Sin tasa BCRD cargada para este período — no se puede consolidar en USD.</p>';
+  }
 }
 
 cargarPeriodos();

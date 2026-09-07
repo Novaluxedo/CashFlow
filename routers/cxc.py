@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from routers.auth import usuario_actual
+from routers.flujo_caja import _obtener_tasa_bcrd, _rango_periodo
 
 router = APIRouter(prefix="/api/cxc", tags=["cuentas_por_cobrar"])
 
@@ -424,7 +425,39 @@ def validacion_banco(
             "sospechosas_transferencia_no_detectada_monto": round(sosp["monto"], 2),
         }
 
-    return {"periodo": periodo, "por_moneda": resultado}
+    # ---------- Consolidacion en USD, solo para este chequeo ----------
+    # El resto del proyecto evita convertir monedas para el numero "real"
+    # de flujo de caja (principio original: nunca mezclar USD/RD$) - pero
+    # aqui, para ESTE chequeo puntual, consolidar ayuda a distinguir un
+    # problema real (dinero faltante) de un problema de pago cruzado
+    # (cliente paga en una moneda, el banco lo deposita en la otra).
+    # Se usa la misma tasa BCRD oficial que ya usa /api/flujo-caja - si
+    # no hay tasa cargada para el periodo, sale null en vez de inventar
+    # un numero, en vez de fallar.
+    _, fin_periodo = _rango_periodo(periodo)
+    tasa_bcrd = _obtener_tasa_bcrd(db, fin_periodo)
+
+    consolidado_usd = None
+    if tasa_bcrd:
+        cobros_rd = resultado["RD$"]["cobros_usd_o_rd"]
+        banco_rd = resultado["RD$"]["banco_confirmado"]
+        cobros_total_usd = resultado["USD"]["cobros_usd_o_rd"] + (cobros_rd / tasa_bcrd)
+        banco_total_usd = resultado["USD"]["banco_confirmado"] + (banco_rd / tasa_bcrd)
+        consolidado_usd = {
+            "tasa_bcrd_usada": tasa_bcrd,
+            "fecha_tasa": str(fin_periodo),
+            "cobros_total_usd": round(cobros_total_usd, 2),
+            "banco_total_usd": round(banco_total_usd, 2),
+            "diferencia_total_usd": round(cobros_total_usd - banco_total_usd, 2),
+            "nota": (
+                "Si esta diferencia consolidada es mucho menor que las diferencias "
+                "por moneda de arriba, confirma que el problema es principalmente "
+                "pagos cruzados (cliente paga en una moneda, el banco lo recibe en "
+                "otra) y no dinero faltante de verdad."
+            ),
+        }
+
+    return {"periodo": periodo, "por_moneda": resultado, "consolidado_usd": consolidado_usd}
 
 
 @router.get("/seguimiento")
