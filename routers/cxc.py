@@ -314,11 +314,22 @@ def validacion_banco(
 ):
     """
     Valida la Metrica 1 (Efectivo Cobrado) contra el estado de banco REAL,
-    sin convertir monedas - cada una en la suya, como manda el principio
-    original del proyecto. Solo BHD tiene extractos cargados por ahora
-    (parser_popular.py todavia no existe), asi que la validacion se limita
-    a BHD - si el mes no tiene extracto BHD cargado, se marca como tal en
-    vez de mostrar un cuadre falso.
+    sin convertir monedas - cada una en la suya. Solo BHD tiene extractos
+    cargados por ahora (parser_popular.py todavia no existe).
+
+    Nota tecnica: el filtro `estado_conciliacion = 'confirmado'` ya excluye
+    por si solo los estados 'transferencia_interna'/'conversion_divisas'
+    (son valores finales distintos, no una sub-categoria de 'confirmado') -
+    asi que ese no era el problema real. El problema real es que la
+    deteccion automatica de transferencia interna (reglas_conciliacion.py)
+    solo funciona cuando AMBOS lados de la transferencia estan en
+    movimientos_banco - si el dinero viene de una cuenta Popular (sin
+    parser todavia) hacia BHD, el sistema nunca ve el debito y la
+    transferencia se queda mal clasificada como 'confirmado' normal. Este
+    endpoint marca esos casos como sospechosos (nombre propio de la
+    empresa en la descripcion, sin sugerencia_auto) en vez de ocultarlos,
+    pero no los excluye automaticamente - requiere revision manual en
+    Backoffice.
     """
     anio, mes = (int(p) for p in periodo.split("-"))
     parametros = {"anio": anio, "mes": mes}
@@ -327,7 +338,7 @@ def validacion_banco(
         text("""
             SELECT c.moneda,
                    SUM(m.credito) AS creditos_confirmados,
-                   COUNT(*) AS filas_totales
+                   COUNT(*) AS filas
             FROM movimientos_banco m
             JOIN cuentas_bancarias c ON c.id = m.cuenta_id
             WHERE c.banco_codigo = 'BHD'
@@ -338,8 +349,21 @@ def validacion_banco(
         parametros,
     ).mappings().all()
 
-    # Para saber si el mes tiene extracto cargado en absoluto (con o sin
-    # confirmar todavia) - distinto de "cargado pero en cero por conciliar".
+    por_conciliar = db.execute(
+        text("""
+            SELECT c.moneda, COUNT(*) AS filas, SUM(m.credito) AS monto
+            FROM movimientos_banco m
+            JOIN cuentas_bancarias c ON c.id = m.cuenta_id
+            WHERE c.banco_codigo = 'BHD'
+              AND EXTRACT(YEAR FROM m.fecha) = :anio AND EXTRACT(MONTH FROM m.fecha) = :mes
+              AND m.estado_conciliacion = 'por_conciliar'
+              AND m.credito > 0
+            GROUP BY c.moneda
+        """),
+        parametros,
+    ).mappings().all()
+
+    # Filas totales cargadas (cualquier estado) - para saber si el mes tiene extracto en absoluto
     banco_filas_totales = db.execute(
         text("""
             SELECT c.moneda, COUNT(*) AS filas
@@ -347,6 +371,25 @@ def validacion_banco(
             JOIN cuentas_bancarias c ON c.id = m.cuenta_id
             WHERE c.banco_codigo = 'BHD'
               AND EXTRACT(YEAR FROM m.fecha) = :anio AND EXTRACT(MONTH FROM m.fecha) = :mes
+            GROUP BY c.moneda
+        """),
+        parametros,
+    ).mappings().all()
+
+    # Sospechosas: confirmado, sin sugerencia_auto, pero con el nombre de la
+    # propia empresa en la descripcion - candidato a transferencia interna
+    # cross-bank (BHD <-> Popular) que la deteccion automatica no atrapo.
+    sospechosas = db.execute(
+        text("""
+            SELECT c.moneda, COUNT(*) AS filas, SUM(m.credito) AS monto
+            FROM movimientos_banco m
+            JOIN cuentas_bancarias c ON c.id = m.cuenta_id
+            WHERE c.banco_codigo = 'BHD'
+              AND EXTRACT(YEAR FROM m.fecha) = :anio AND EXTRACT(MONTH FROM m.fecha) = :mes
+              AND m.estado_conciliacion = 'confirmado'
+              AND m.sugerencia_auto IS NULL
+              AND m.descripcion ILIKE '%NOVALUM%'
+              AND m.credito > 0
             GROUP BY c.moneda
         """),
         parametros,
@@ -364,6 +407,8 @@ def validacion_banco(
 
     banco_map = {b["moneda"]: float(b["creditos_confirmados"] or 0) for b in banco}
     banco_filas_map = {b["moneda"]: b["filas"] for b in banco_filas_totales}
+    por_conciliar_map = {p["moneda"]: {"filas": p["filas"], "monto": float(p["monto"] or 0)} for p in por_conciliar}
+    sospechosas_map = {s["moneda"]: {"filas": s["filas"], "monto": float(s["monto"] or 0)} for s in sospechosas}
     cobros_map = {c["moneda"]: float(c["total"] or 0) for c in cobros_por_moneda}
 
     resultado = {}
@@ -371,11 +416,18 @@ def validacion_banco(
         disponible = banco_filas_map.get(moneda, 0) > 0
         cobros_val = cobros_map.get(moneda, 0.0)
         banco_val = banco_map.get(moneda, 0.0)
+        pend = por_conciliar_map.get(moneda, {"filas": 0, "monto": 0.0})
+        sosp = sospechosas_map.get(moneda, {"filas": 0, "monto": 0.0})
+
         resultado[moneda] = {
             "banco_disponible": disponible,
             "cobros_usd_o_rd": round(cobros_val, 2),
             "banco_confirmado": round(banco_val, 2),
             "diferencia": round(cobros_val - banco_val, 2) if disponible else None,
+            "por_conciliar_filas": pend["filas"],
+            "por_conciliar_monto": round(pend["monto"], 2),
+            "sospechosas_transferencia_no_detectada_filas": sosp["filas"],
+            "sospechosas_transferencia_no_detectada_monto": round(sosp["monto"], 2),
         }
 
     return {"periodo": periodo, "por_moneda": resultado}

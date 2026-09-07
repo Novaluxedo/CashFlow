@@ -251,24 +251,33 @@ async function cargarValidacionBanco(periodo) {
   const data = await res.json();
 
   const filas = Object.entries(data.por_moneda).map(([moneda, v]) => {
+    const simbolo = moneda === 'RD$' ? 'RD$' : 'USD';
     if (!v.banco_disponible) {
       return `
         <tr>
           <td class="strong">${moneda}</td>
-          <td class="num strong">${formatearMonto(v.cobros_usd_o_rd, moneda === 'RD$' ? 'RD$' : 'USD')}</td>
+          <td class="num strong">${formatearMonto(v.cobros_usd_o_rd, simbolo)}</td>
           <td class="num" colspan="2">Sin extracto BHD cargado este mes</td>
           <td><span class="badge" style="color:var(--text3);background:var(--bg3)">Sin dato</span></td>
         </tr>`;
     }
     const ok = Math.abs(v.diferencia) < 1;
+    const notas = [];
+    if (v.por_conciliar_monto > 0) {
+      notas.push(`${formatearMonto(v.por_conciliar_monto, simbolo)} sin revisar todavía (${v.por_conciliar_filas} mov.)`);
+    }
+    if (v.sospechosas_transferencia_no_detectada_monto > 0) {
+      notas.push(`⚠ ${formatearMonto(v.sospechosas_transferencia_no_detectada_monto, simbolo)} parecen transferencia interna no detectada (${v.sospechosas_transferencia_no_detectada_filas} mov. con "NOVALUM" en la descripción) — revisar en Backoffice`);
+    }
     return `
       <tr>
         <td class="strong">${moneda}</td>
-        <td class="num strong">${formatearMonto(v.cobros_usd_o_rd, moneda === 'RD$' ? 'RD$' : 'USD')}</td>
-        <td class="num strong">${formatearMonto(v.banco_confirmado, moneda === 'RD$' ? 'RD$' : 'USD')}</td>
-        <td class="num" style="color:${ok ? '#4caf7a' : 'var(--red)'}">${formatearMonto(v.diferencia, moneda === 'RD$' ? 'RD$' : 'USD')}</td>
+        <td class="num strong">${formatearMonto(v.cobros_usd_o_rd, simbolo)}</td>
+        <td class="num strong">${formatearMonto(v.banco_confirmado, simbolo)}</td>
+        <td class="num" style="color:${ok ? '#4caf7a' : 'var(--red)'}">${formatearMonto(v.diferencia, simbolo)}</td>
         <td><span class="badge" style="color:${ok ? '#4caf7a' : 'var(--red)'};background:${ok ? 'rgba(76,175,122,0.12)' : 'rgba(232,41,58,0.12)'}">${ok ? '✓ Cuadra' : '⚠ Revisar'}</span></td>
-      </tr>`;
+      </tr>
+      ${notas.length ? `<tr><td></td><td colspan="4" style="font-size:11px;color:var(--text3)">${notas.join(' · ')}</td></tr>` : ''}`;
   });
 
   document.getElementById('tabla-validacion-banco').innerHTML = filas.join('');
