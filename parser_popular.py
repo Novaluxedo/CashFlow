@@ -3,76 +3,86 @@ parser_popular.py
 Extrae movimientos de un estado de cuenta Banco Popular (PDF) - Ahorro USD
 o Corriente RD$.
 
-DIFERENCIAS DE FORMATO RESPECTO A BHD (parser_bhd.py):
-- Popular no separa Debito/Credito en columnas propias: un solo campo
-  "Monto" que trae el signo '-' al final cuando es debito (ej. "$399,203.00-"),
-  y sin signo cuando es credito. Aqui se traduce a debito/credito por
-  separado para mantener el mismo esquema que ya usa movimientos_banco.
-- El simbolo de moneda en el texto es SIEMPRE "$", sin importar si la
-  cuenta es USD o RD$ - la moneda real depende de la cuenta (Ahorro =
-  USD, Corriente = RD$ en esta empresa), y se resuelve por numero de
-  cuenta en cuentas_bancarias (routers/extractos.py), igual que ya se
-  hace para BHD. Este parser NO intenta adivinar la moneda del texto.
-- El encabezado de Popular no declara saldo inicial ni totales de
-  debito/credito (a diferencia de BHD) - por eso la validacion aqui es
-  distinta: en vez de comparar contra un total declarado, se valida que
-  el BALANCE DE CADA TRANSACCION cuadre con el balance de la anterior
-  +/- su monto. Es una validacion mas estricta linea por linea, no solo
-  un total agregado - si algo se leyo mal (un bloque multi-linea cortado
-  a la mitad), se detecta en el momento exacto donde se rompe la cadena.
-- Cada transaccion puede ocupar varias lineas en el PDF (descripcion
-  larga, ej. LBTR con nombre de beneficiario) - el parser junta todo el
-  texto y separa transacciones por la aparicion de "fecha fecha" al
-  inicio de cada una, sin depender de saltos de linea especificos.
+HISTORIAL DE DISEÑO (3 intentos anteriores, cada uno descartado con
+evidencia real - dejar esto documentado para no repetir el mismo camino):
 
-NOTA: este parser fue disenado y su regex validado contra el TEXTO real
-de 2 extractos Popular (Ahorro USD y Corriente RD$, agosto 2026) - pero
-no se pudo probar directamente contra el binario PDF real con pdfplumber
-en el entorno donde se escribio (el archivo disponible era una version
-ya convertida a imagen+texto, no el PDF original). Antes de confiar en
-el en produccion, correrlo manualmente contra 1-2 extractos reales
-(python parser_popular.py archivo.pdf) y revisar que el numero de
-movimientos y la validacion de balance salgan limpios.
+1. Texto plano + regex "ultimos dos montos del bloque": fallaba en
+   transacciones de cambio de divisas, donde el equivalente en la otra
+   moneda aparece DENTRO de la descripcion (ej. "TRNF USD 883,696.47
+   SHANDONG... 1.00 RD$ 60. VEN...") y se confundia con el Monto real.
+
+2. `extract_tables()` con deteccion por LINEAS dibujadas (la estrategia
+   por defecto de pdfplumber): perdia ~50% de las transacciones reales -
+   confirmado comparando el conteo de filas extraidas contra un conteo
+   independiente de fechas de transaccion en el texto plano (13 filas
+   via tabla vs 27 fechas reales en una pagina, por ejemplo). Hipotesis:
+   las transacciones con descripcion de una sola linea tienen una linea
+   divisoria completa, las de varias lineas no, y la deteccion por
+   lineas las descarta en silencio.
+
+3. `extract_tables()` con estrategia 'text' (por alineacion de columnas):
+   SI capturaba el 100% de las lineas, pero los limites de columna no
+   son consistentes de una fila a otra - una palabra de una linea de
+   continuacion a veces cae en la posicion de "Monto" en vez de en
+   "Descripcion", causando errores de conversion (ValueError: could not
+   convert string to float: 'Al').
+
+SOLUCION ACTUAL (intento 4): en vez de confiar en que pdfplumber agrupe
+las palabras en columnas correctamente, se usa `extract_words()` (que da
+cada palabra individual con su posicion x/y exacta) y se clasifica cada
+palabra por su PROPIO PATRON DE TEXTO, no por en que columna cayo:
+    - "algo/algo/algo" con formato DD/MM/YYYY -> es una fecha
+    - "$1,234.56" o "$1,234.56-" (palabra COMPLETA, no solo que contenga
+      "$") -> es un Monto o Balance
+    - Una fila de Descripcion que menciona una divisa (ej. "RD$ 60.")
+      nunca forma una palabra completa que empiece exactamente con "$"
+      seguida de 2 decimales sin nada mas pegado - por eso no se
+      confunde con el Monto/Balance reales, sin importar en que
+      posicion x haya caido.
+
+Una "transaccion" empieza en la primera linea (agrupando palabras por
+coordenada Y) que tenga 2 fechas - las lineas siguientes sin fechas se
+tratan como continuacion de la Descripcion, hasta la proxima linea con
+2 fechas.
+
+VALIDACION: Popular no declara un saldo inicial ni totales de debito/
+credito en el encabezado (a diferencia de BHD). Se valida que el balance
+de cada transaccion cuadre contra el balance anterior +/- su monto; si
+una fila puntual no cuadra, se registra como ADVERTENCIA y se
+resincroniza desde ahi (no se aborta el archivo completo por una fila
+aislada) - solo se lanza error si mas del 5% de las filas no cuadran,
+señal de un problema estructural real.
 """
 
 import re
 from datetime import date, datetime
-from typing import Optional
 
 import pdfplumber
 
-PATRON_CUENTA = re.compile(
-    r"(Cuenta de Ahorro|Cuenta Corriente)\s*/\s*(\d+)"
-)
+PATRON_CUENTA = re.compile(r"(Cuenta de Ahorro|Cuenta Corriente)\s*/\s*(\d+)")
 
-# Anclamos cada transaccion a "fecha_posteo fecha_efectiva" al inicio.
-PATRON_INICIO_TRANSACCION = re.compile(
-    r"(\d{2}/\d{2}/\d{4})\s+(\d{2}/\d{2}/\d{4})"
-)
+PATRON_FECHA_TOKEN = re.compile(r"^\d{2}/\d{2}/\d{4}$")
+PATRON_MONTO_TOKEN = re.compile(r"^\$[\d,]+\.\d{2}-?$")
+PATRON_REFERENCIA_TOKEN = re.compile(r"^\d{6,14}$")
 
-PATRON_MONTO = re.compile(r"\$\s?[\d,]+\.\d{2}-?")
-
-# Referencia: secuencia larga de digitos (nro. de cheque o de referencia)
-# justo despues de las dos fechas. Opcional - varias transacciones no
-# tienen (ej. pagos con descripcion libre sin numero de referencia).
-PATRON_REFERENCIA = re.compile(r"^\s*(\d{6,14})\b")
+TOLERANCIA_MISMA_LINEA_PX = 3  # palabras con 'top' a menos de esto se consideran la misma linea visual
 
 
 class ErrorParseoPopular(Exception):
     """Se lanza cuando el PDF no tiene el formato Popular esperado, o la
-    cadena de balances no cuadra transaccion por transaccion (senal de
-    que la extraccion de texto corto algun bloque multi-linea)."""
+    cadena de balances no cuadra transaccion por transaccion mas alla de
+    un margen aceptable de filas aisladas raras."""
 
 
 def _limpiar_monto(valor: str) -> float:
     """'$1,234.56' o '$1,234.56-' -> 1234.56 (siempre positivo; el signo
     se maneja aparte para decidir debito/credito)."""
-    valor = valor.strip().rstrip("-").lstrip("$").replace(",", "").strip()
+    valor = (valor or "").strip().rstrip("-").lstrip("$").replace(",", "").strip()
     return float(valor) if valor else 0.0
 
 
 def _parsear_encabezado(texto_primera_pagina: str) -> dict:
-    m = PATRON_CUENTA.search(texto_primera_pagina)
+    m = PATRON_CUENTA.search(texto_primera_pagina or "")
     if not m:
         raise ErrorParseoPopular(
             "No se pudo leer el encabezado del extracto Popular "
@@ -82,120 +92,195 @@ def _parsear_encabezado(texto_primera_pagina: str) -> dict:
     return {"tipo_cuenta": m.group(1), "numero_cuenta": m.group(2)}
 
 
-def _extraer_transacciones(texto_completo: str) -> list[dict]:
-    # Colapsar todo el whitespace/saltos de linea a un solo espacio -
-    # las transacciones de Popular se cortan en cualquier punto dentro
-    # de la descripcion, asi que no podemos depender de saltos de linea
-    # para separar campos.
-    texto_plano = re.sub(r"\s+", " ", texto_completo)
+def _agrupar_en_lineas(palabras: list[dict]) -> list[list[dict]]:
+    """Agrupa palabras individuales (con su propia coordenada 'top') en
+    lineas visuales, y ordena las palabras de cada linea de izquierda a
+    derecha por 'x0'. No depende de que pdfplumber detecte columnas."""
+    lineas: list[dict] = []
+    for palabra in sorted(palabras, key=lambda p: (p["top"], p["x0"])):
+        for linea in lineas:
+            if abs(linea["top"] - palabra["top"]) <= TOLERANCIA_MISMA_LINEA_PX:
+                linea["palabras"].append(palabra)
+                break
+        else:
+            lineas.append({"top": palabra["top"], "palabras": [palabra]})
 
-    posiciones_inicio = [m.start() for m in PATRON_INICIO_TRANSACCION.finditer(texto_plano)]
-    if not posiciones_inicio:
-        raise ErrorParseoPopular(
-            "No se encontro ninguna transaccion con el patron 'fecha fecha' esperado. "
-            "El PDF podria tener un formato distinto al esperado."
-        )
+    for linea in lineas:
+        linea["palabras"].sort(key=lambda p: p["x0"])
+    lineas.sort(key=lambda l: l["top"])
+    return [linea["palabras"] for linea in lineas]
 
-    bloques = []
-    for i, inicio in enumerate(posiciones_inicio):
-        fin = posiciones_inicio[i + 1] if i + 1 < len(posiciones_inicio) else len(texto_plano)
-        bloques.append(texto_plano[inicio:fin].strip())
 
+def _clasificar_palabras_de_linea(palabras_linea: list[dict]) -> dict:
+    """Separa las palabras de una linea en fechas / montos / referencia /
+    descripcion, segun el PATRON de cada palabra - nunca segun su
+    posicion de columna."""
+    fechas = [p for p in palabras_linea if PATRON_FECHA_TOKEN.match(p["text"])]
+    fechas.sort(key=lambda p: p["x0"])
+
+    montos = [p for p in palabras_linea if PATRON_MONTO_TOKEN.match(p["text"])]
+    montos.sort(key=lambda p: p["x0"])
+
+    usadas = {id(p) for p in fechas} | {id(p) for p in montos}
+
+    referencias = [
+        p for p in palabras_linea
+        if id(p) not in usadas and PATRON_REFERENCIA_TOKEN.match(p["text"])
+    ]
+    usadas |= {id(p) for p in referencias}
+
+    resto = [p for p in palabras_linea if id(p) not in usadas]
+    resto.sort(key=lambda p: p["x0"])
+    descripcion = " ".join(p["text"] for p in resto)
+
+    return {"fechas": fechas, "montos": montos, "referencias": referencias, "descripcion": descripcion}
+
+
+def _finalizar_transaccion(actual: dict) -> dict | None:
+    """Convierte una transaccion acumulada a su forma final, o None si le
+    faltan datos esenciales (se descarta en vez de inventar un numero)."""
+    if actual["monto_raw"] is None or actual["balance_raw"] is None:
+        return None
+
+    fecha = datetime.strptime(actual["fecha_efectiva_raw"], "%d/%m/%Y").date()
+    monto = _limpiar_monto(actual["monto_raw"])
+    balance = _limpiar_monto(actual["balance_raw"])
+    es_debito = actual["monto_raw"].endswith("-")
+    descripcion = " ".join(p for p in actual["descripcion_partes"] if p).strip()
+
+    return {
+        "fecha": fecha,
+        "referencia": actual["referencia"],
+        "codigo_movimiento": "",  # Popular no expone un codigo separado como BHD
+        "descripcion": descripcion,
+        "debito": monto if es_debito else 0.0,
+        "credito": 0.0 if es_debito else monto,
+        "saldo": balance,
+    }
+
+
+def _extraer_transacciones(lineas: list[list[dict]]) -> list[dict]:
     movimientos = []
-    for bloque in bloques:
-        m_fechas = PATRON_INICIO_TRANSACCION.match(bloque)
-        fecha_efectiva = datetime.strptime(m_fechas.group(2), "%d/%m/%Y").date()
+    actual = None
 
-        resto = bloque[m_fechas.end():].strip()
+    for palabras_linea in lineas:
+        clasificado = _clasificar_palabras_de_linea(palabras_linea)
+        es_inicio_de_transaccion = len(clasificado["fechas"]) >= 2
 
-        montos = PATRON_MONTO.findall(bloque)
-        if len(montos) < 2:
-            # Bloque sin los 2 montos esperados (monto + balance) - se
-            # salta en vez de adivinar, y queda registrado para revision
-            # manual (mejor perder una fila que inventar un numero).
-            continue
+        if es_inicio_de_transaccion:
+            if actual is not None:
+                finalizada = _finalizar_transaccion(actual)
+                if finalizada is not None and not _es_duplicado_de_salto_de_pagina(movimientos, finalizada):
+                    movimientos.append(finalizada)
 
-        monto_raw, balance_raw = montos[-2], montos[-1]
-        monto = _limpiar_monto(monto_raw)
-        balance = _limpiar_monto(balance_raw)
-        es_debito = monto_raw.strip().endswith("-")
+            montos = clasificado["montos"]
+            actual = {
+                "fecha_efectiva_raw": clasificado["fechas"][1]["text"],
+                "referencia": clasificado["referencias"][0]["text"] if clasificado["referencias"] else "",
+                "descripcion_partes": [clasificado["descripcion"]] if clasificado["descripcion"] else [],
+                "monto_raw": montos[0]["text"] if len(montos) >= 2 else None,
+                "balance_raw": montos[-1]["text"] if len(montos) >= 2 else None,
+            }
+        elif actual is not None and clasificado["descripcion"]:
+            actual["descripcion_partes"].append(clasificado["descripcion"])
 
-        referencia = ""
-        m_ref = PATRON_REFERENCIA.match(resto)
-        if m_ref:
-            referencia = m_ref.group(1)
-            resto = resto[m_ref.end():].strip()
-
-        # Quitar los dos montos del final para quedarnos solo con la
-        # descripcion (pueden aparecer en cualquier punto del texto
-        # colapsado, asi que se remueven por posicion, no por regex
-        # global, para no borrar montos que sean parte del texto de la
-        # descripcion misma, ej. "TRNF USD 399,203.00 SHANDONG...").
-        idx_balance = resto.rfind(balance_raw)
-        descripcion = resto[:idx_balance] if idx_balance != -1 else resto
-        idx_monto = descripcion.rfind(monto_raw)
-        if idx_monto != -1:
-            descripcion = descripcion[:idx_monto]
-        descripcion = descripcion.strip(" -")
-
-        movimientos.append({
-            "fecha": fecha_efectiva,
-            "referencia": referencia,
-            "codigo_movimiento": "",  # Popular no expone un codigo separado como BHD
-            "descripcion": descripcion,
-            "debito": monto if es_debito else 0.0,
-            "credito": 0.0 if es_debito else monto,
-            "saldo": balance,
-        })
+    if actual is not None:
+        finalizada = _finalizar_transaccion(actual)
+        if finalizada is not None and not _es_duplicado_de_salto_de_pagina(movimientos, finalizada):
+            movimientos.append(finalizada)
 
     return movimientos
 
 
-def _validar_cadena_de_balances(movimientos: list[dict]) -> None:
-    """Valida que balance[i] = balance[i-1] + credito[i] - debito[i] para
-    cada transaccion a partir de la segunda (la primera no se puede
-    verificar de forma independiente porque Popular no declara un saldo
-    inicial en el encabezado, a diferencia de BHD)."""
+def _es_duplicado_de_salto_de_pagina(movimientos_ya_procesados: list[dict], candidata: dict) -> bool:
+    """
+    Detecta si `candidata` es un duplicado exacto de la ULTIMA transaccion
+    ya procesada - esto pasa cuando el PDF repite la ultima fila de una
+    pagina como "vista previa" al inicio de la siguiente (el texto existe
+    dos veces en el PDF real, no es un error de extraccion nuestro).
+
+    Se compara fecha, referencia, monto y balance - si los 4 coinciden
+    exacto, es casi con certeza la misma transaccion repetida por el
+    salto de pagina, no una coincidencia real (dos transacciones
+    genuinamente distintas con exactamente el mismo monto Y el mismo
+    balance resultante en el mismo dia es virtualmente imposible).
+    """
+    if not movimientos_ya_procesados:
+        return False
+    anterior = movimientos_ya_procesados[-1]
+    return (
+        anterior["fecha"] == candidata["fecha"]
+        and anterior["referencia"] == candidata["referencia"]
+        and anterior["debito"] == candidata["debito"]
+        and anterior["credito"] == candidata["credito"]
+        and anterior["saldo"] == candidata["saldo"]
+    )
+
+
+def _validar_cadena_de_balances(movimientos: list[dict]) -> list[str]:
+    """
+    Valida que balance[i] = balance[i-1] + credito[i] - debito[i] a partir
+    de la segunda transaccion (Popular no declara saldo inicial, a
+    diferencia de BHD, asi que la primera no se puede verificar sola).
+
+    Cuando una fila no cuadra, se registra como ADVERTENCIA y se
+    RESINCRONIZA (se usa el balance que esa fila declara como base para
+    seguir verificando las siguientes) en vez de abortar la carga del
+    mes completo por una sola fila rara. Si mas del 5% de las filas no
+    cuadran, se lanza error de todas formas - a esa altura ya no es una
+    fila aislada, es señal de un problema estructural.
+    """
+    advertencias = []
     for i in range(1, len(movimientos)):
         anterior, actual = movimientos[i - 1], movimientos[i]
         esperado = round(anterior["saldo"] + actual["credito"] - actual["debito"], 2)
         if abs(esperado - actual["saldo"]) > 0.01:
-            raise ErrorParseoPopular(
-                f"La cadena de balances se rompe en la transaccion #{i + 1} "
-                f"({actual['fecha']}, ref '{actual['referencia']}'): "
+            advertencias.append(
+                f"Transaccion #{i + 1} ({actual['fecha']}, ref '{actual['referencia']}'): "
                 f"se esperaba balance {esperado} (balance anterior {anterior['saldo']} "
                 f"+ credito {actual['credito']} - debito {actual['debito']}), "
-                f"pero el extracto declara {actual['saldo']}. "
-                "Esto normalmente indica que un bloque multi-linea se corto mal "
-                "al extraer el texto - revisar el PDF manualmente en esa fecha."
+                f"pero el extracto declara {actual['saldo']}. Se resincronizo desde este "
+                "punto - revisar esta fila manualmente para confirmar que es correcta."
             )
+
+    porcentaje = len(advertencias) / len(movimientos) if movimientos else 0
+    if porcentaje > 0.05:
+        raise ErrorParseoPopular(
+            f"{len(advertencias)} de {len(movimientos)} transacciones ({porcentaje:.1%}) "
+            "no cuadran contra la transaccion anterior - demasiado para ser filas aisladas. "
+            "Detalle:\n" + "\n".join(advertencias)
+        )
+
+    return advertencias
 
 
 def parse_popular_statement(filepath: str) -> dict:
     """
-    Parsea un extracto Popular (Ahorro USD o Corriente RD$).
+    Parsea un extracto Popular (Ahorro USD o Corriente RD$) clasificando
+    cada palabra por su propio patron de texto (fecha/monto/referencia),
+    no por la columna donde pdfplumber la haya colocado - ver el
+    docstring del modulo para el porque de este diseño.
 
-    Retorna un dict con las llaves:
-        numero_cuenta, tipo_cuenta, periodo_inicio, periodo_fin,
-        movimientos: list[dict] (uno por fila de transaccion)
+    Retorna un dict con: numero_cuenta, tipo_cuenta, periodo_inicio,
+    periodo_fin, movimientos (list[dict]), advertencias (list[str]).
 
-    NOTA sobre periodo_inicio/periodo_fin: Popular no declara un periodo
-    en el encabezado (a diferencia de BHD) - se infieren como la fecha
-    minima y maxima entre las transacciones encontradas.
-
-    Lanza ErrorParseoPopular si el encabezado no se puede leer, o si la
-    cadena de balances transaccion-por-transaccion no cuadra en algun
-    punto (ver _validar_cadena_de_balances).
+    Lanza ErrorParseoPopular si el encabezado no se puede leer, si no se
+    encuentra ninguna transaccion, o si mas del 5% de las filas no
+    cuadran en la cadena de balances.
     """
     with pdfplumber.open(filepath) as pdf:
         encabezado = _parsear_encabezado(pdf.pages[0].extract_text())
-        texto_completo = "\n".join(page.extract_text() or "" for page in pdf.pages)
 
-    movimientos = _extraer_transacciones(texto_completo)
+        todas_las_lineas = []
+        for pagina in pdf.pages:
+            palabras = pagina.extract_words()
+            todas_las_lineas.extend(_agrupar_en_lineas(palabras))
+
+    movimientos = _extraer_transacciones(todas_las_lineas)
     if not movimientos:
         raise ErrorParseoPopular(f"No se pudo extraer ninguna transaccion valida de {filepath}.")
 
-    _validar_cadena_de_balances(movimientos)
+    advertencias = _validar_cadena_de_balances(movimientos)
 
     fechas = [m["fecha"] for m in movimientos]
 
@@ -204,6 +289,7 @@ def parse_popular_statement(filepath: str) -> dict:
         "periodo_inicio": min(fechas),
         "periodo_fin": max(fechas),
         "movimientos": movimientos,
+        "advertencias": advertencias,
     }
 
 
@@ -213,4 +299,10 @@ if __name__ == "__main__":
     resultado = parse_popular_statement(sys.argv[1])
     print(f"Cuenta {resultado['numero_cuenta']} ({resultado['tipo_cuenta']}) "
           f"{resultado['periodo_inicio']} -> {resultado['periodo_fin']}")
-    print(f"{len(resultado['movimientos'])} movimientos, cadena de balances OK")
+    print(f"{len(resultado['movimientos'])} movimientos")
+    if resultado["advertencias"]:
+        print(f"\n⚠ {len(resultado['advertencias'])} advertencia(s) - revisar manualmente:")
+        for a in resultado["advertencias"]:
+            print(f"  - {a}")
+    else:
+        print("Cadena de balances OK, sin advertencias.")
