@@ -209,6 +209,103 @@ def resumen_mensual(
     return respuesta
 
 
+@router.get("/detalle-periodo")
+def detalle_periodo(
+    periodo: str = Query(..., description="YYYY-MM, obligatorio"),
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(usuario_actual),
+):
+    """
+    Vista para el dashboard principal: factura a factura del mes
+    seleccionado, mas las dos metricas resumidas para ese mismo mes.
+
+    Metrica 1 (cash_entrado_usd): cuanto efectivo real entro ese mes -
+    viene de `cobros` (no de las facturas), convertido a USD con la tasa
+    real de cada cobro. Un cobro de este mes puede pagar una factura de
+    un mes anterior - por eso este numero es independiente de la lista
+    de facturas de abajo.
+
+    Metrica 2 (ventas_usd = cobrado_usd + saldo_abierto_usd): para las
+    facturas EMITIDAS en este mes, cuanto de eso ya se cobro (a la fecha
+    de hoy, via BalDueDeb) y cuanto sigue en CxC. Por construccion estos
+    dos siempre deben sumar el total facturado - si no cuadra exacto, es
+    señal de un problema de datos, no de la formula.
+    """
+    anio, mes = (int(p) for p in periodo.split("-"))
+    parametros = {"anio": anio, "mes": mes}
+
+    # ---------- Metrica 1: cash entrado ese mes (independiente de la factura) ----------
+    cobros_mes = db.execute(
+        text("""
+            SELECT
+                SUM(CASE WHEN moneda = 'USD' THEN monto ELSE monto * COALESCE(tasa_cambio, 0) END) AS cash_entrado_usd,
+                SUM(CASE WHEN tasa_cambio IS NULL AND moneda != 'USD' THEN 1 ELSE 0 END) AS cobros_sin_tasa
+            FROM cobros
+            WHERE EXTRACT(YEAR FROM fecha) = :anio AND EXTRACT(MONTH FROM fecha) = :mes
+        """),
+        parametros,
+    ).mappings().first()
+
+    # ---------- Metrica 2 + listado factura a factura, de lo emitido ese mes ----------
+    facturas = db.execute(
+        text("""
+            SELECT doc_entry, doc_num, cliente_code, fecha,
+                   debito AS venta_usd,
+                   (debito - saldo_abierto_debito) AS cobrado_usd,
+                   saldo_abierto_debito AS saldo_abierto_usd
+            FROM cxc_movimientos
+            WHERE trans_type = '13'
+              AND EXTRACT(YEAR FROM fecha) = :anio AND EXTRACT(MONTH FROM fecha) = :mes
+            ORDER BY fecha, doc_num
+        """),
+        parametros,
+    ).mappings().all()
+
+    facturas_out = []
+    total_ventas = 0.0
+    total_cobrado = 0.0
+    total_saldo_abierto = 0.0
+
+    for f in facturas:
+        venta = float(f["venta_usd"])
+        cobrado = float(f["cobrado_usd"])
+        saldo = float(f["saldo_abierto_usd"])
+        total_ventas += venta
+        total_cobrado += cobrado
+        total_saldo_abierto += saldo
+
+        if saldo <= 0.005:
+            estado = "pagada"
+        elif cobrado <= 0.005:
+            estado = "abierta"
+        else:
+            estado = "parcial"
+
+        facturas_out.append({
+            "doc_entry": f["doc_entry"],
+            "doc_num": f["doc_num"],
+            "cliente_code": f["cliente_code"],
+            "fecha": str(f["fecha"]),
+            "venta_usd": round(venta, 2),
+            "cobrado_usd": round(cobrado, 2),
+            "saldo_abierto_usd": round(saldo, 2),
+            "estado": estado,
+        })
+
+    diferencia_cuadre = round(total_ventas - (total_cobrado + total_saldo_abierto), 2)
+
+    return {
+        "periodo": periodo,
+        "metrica_1_cash_entrado_usd": round(float(cobros_mes["cash_entrado_usd"] or 0), 2),
+        "metrica_1_cobros_sin_tasa": cobros_mes["cobros_sin_tasa"] or 0,
+        "metrica_2_ventas_usd": round(total_ventas, 2),
+        "metrica_2_cobrado_usd": round(total_cobrado, 2),
+        "metrica_2_saldo_abierto_usd": round(total_saldo_abierto, 2),
+        "metrica_2_diferencia_cuadre": diferencia_cuadre,
+        "facturas": facturas_out,
+    }
+
+
 @router.get("/seguimiento")
 def seguimiento_ventas_vs_cobros(
     periodo: str | None = Query(None, description="YYYY-MM opcional. Sin esto, trae todos los meses disponibles."),

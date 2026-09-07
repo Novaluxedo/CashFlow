@@ -195,19 +195,38 @@
 
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-      <h3>Cuentas por cobrar — Ventas vs. Cobros, por mes (USD)</h3>
+      <h3>Cuentas por cobrar — <span id="cxc-periodo-label"></span></h3>
       <a href="/cxc.html" style="font-size:11.5px;color:var(--amber);text-decoration:none">Ver detalle por cliente →</a>
     </div>
-    <div id="alerta-cxc-resumen"></div>
+    <div id="alerta-cxc"></div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
+      <div style="background:var(--bg3);border:0.5px solid var(--border);border-radius:8px;padding:14px 16px">
+        <div style="font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Métrica 1 — Cash entrado este mes</div>
+        <div style="font-size:20px;font-family:var(--mono);font-weight:500" id="cxc-metrica1">—</div>
+        <div style="font-size:11px;color:var(--text2);margin-top:4px">Cobros reales del mes, en USD — puede incluir cobro de facturas de meses anteriores.</div>
+      </div>
+      <div style="background:var(--bg3);border:0.5px solid var(--border);border-radius:8px;padding:14px 16px">
+        <div style="font-size:10.5px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Métrica 2 — Cuadre de lo facturado este mes</div>
+        <div style="font-size:13px;font-family:var(--mono)">
+          <span id="cxc-metrica2-ventas">—</span> =
+          <span id="cxc-metrica2-cobrado">—</span> cobrado +
+          <span id="cxc-metrica2-saldo">—</span> en CxC
+        </div>
+        <div style="font-size:11px;margin-top:4px" id="cxc-metrica2-check">—</div>
+      </div>
+    </div>
+
     <table>
       <thead>
-        <tr><th>Mes</th><th class="num">Ventas</th><th class="num">Cobros</th><th class="num">Variación neta</th><th class="num">Saldo abierto (origen ese mes)</th></tr>
+        <tr><th>Factura</th><th>Cliente</th><th>Fecha</th><th class="num">Venta</th><th class="num">Cobrado</th><th class="num">Saldo abierto</th><th>Estado</th></tr>
       </thead>
-      <tbody id="tabla-cxc-resumen"><tr><td colspan="5" class="empty">Cargando…</td></tr></tbody>
+      <tbody id="tabla-cxc-facturas"><tr><td colspan="7" class="empty">Cargando…</td></tr></tbody>
     </table>
     <p style="font-size:11px;color:var(--text3);margin-top:10px">
-      Variación positiva = se vendió más de lo que se cobró ese mes (creció CxC). Negativa = se cobró más de lo facturado (se cobró cartera vieja).
-      "Saldo abierto" es lo que sigue pendiente HOY de lo facturado en ese mes — no un histórico del saldo mes a mes.
+      Listado factura a factura de lo emitido en el mes seleccionado, tal como quedó registrado en SAP.
+      "Cobrado" y "Saldo abierto" son el estado a la fecha de hoy (BalDueDeb) — una factura de este mes
+      puede seguir mostrando cobros después de que cierre el período.
     </p>
   </div>
 
@@ -257,7 +276,10 @@ async function cargarPeriodos() {
   const select = document.getElementById('periodo');
   select.innerHTML = periodos.map(p => `<option value="${p.valor}">${p.etiqueta}</option>`).join('');
   select.addEventListener('change', () => cargarFlujo(select.value));
-  if (periodos.length) cargarFlujo(periodos[0].valor);
+  if (periodos.length) {
+    cargarFlujo(periodos[0].valor);
+    cargarCxC(periodos[0].valor);
+  }
 }
 
 let porCuentaActual = [];
@@ -379,32 +401,58 @@ async function cargarMetodoDirecto() {
   `;
 }
 
-async function cargarResumenCxC() {
-  const res = await fetch('/api/cxc/resumen-mensual', { headers });
+function badgeEstado(estado) {
+  const mapa = {
+    pagada: { texto: 'Pagada', color: '#4caf7a', bg: 'rgba(76,175,122,0.12)' },
+    parcial: { texto: 'Parcial', color: 'var(--amber)', bg: 'rgba(201,168,76,0.12)' },
+    abierta: { texto: 'Abierta', color: 'var(--red)', bg: 'rgba(232,41,58,0.12)' },
+  };
+  const e = mapa[estado] || mapa.abierta;
+  return `<span style="display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;color:${e.color};background:${e.bg}">${e.texto}</span>`;
+}
+
+async function cargarCxC(periodo) {
+  document.getElementById('cxc-periodo-label').textContent = periodo || '';
+
+  const res = await fetch(`/api/cxc/detalle-periodo?periodo=${periodo}`, { headers });
   const data = await res.json();
 
-  const alertaBox = document.getElementById('alerta-cxc-resumen');
-  alertaBox.innerHTML = data.advertencia
-    ? `<div class="alert warning">⚠ ${data.advertencia}</div>`
+  const alertaBox = document.getElementById('alerta-cxc');
+  alertaBox.innerHTML = data.metrica_1_cobros_sin_tasa
+    ? `<div class="alert warning">⚠ ${data.metrica_1_cobros_sin_tasa} cobro(s) en RD$ sin tasa_cambio registrada — Métrica 1 sale incompleta hasta volver a correr sync_flujo.py.</div>`
     : '';
 
-  const tbody = document.getElementById('tabla-cxc-resumen');
-  tbody.innerHTML = data.meses.length
-    ? data.meses.map(m => `
+  document.getElementById('cxc-metrica1').textContent = formatearMonto(data.metrica_1_cash_entrado_usd, 'USD');
+  document.getElementById('cxc-metrica2-ventas').textContent = formatearMonto(data.metrica_2_ventas_usd, 'USD');
+  document.getElementById('cxc-metrica2-cobrado').textContent = formatearMonto(data.metrica_2_cobrado_usd, 'USD');
+  document.getElementById('cxc-metrica2-saldo').textContent = formatearMonto(data.metrica_2_saldo_abierto_usd, 'USD');
+
+  const check = document.getElementById('cxc-metrica2-check');
+  if (Math.abs(data.metrica_2_diferencia_cuadre) < 0.01) {
+    check.innerHTML = '<span style="color:#4caf7a">✓ Cuadra exacto</span>';
+  } else {
+    check.innerHTML = `<span style="color:var(--red)">⚠ Diferencia de ${formatearMonto(data.metrica_2_diferencia_cuadre, 'USD')} — revisar</span>`;
+  }
+
+  const tbody = document.getElementById('tabla-cxc-facturas');
+  tbody.innerHTML = data.facturas.length
+    ? data.facturas.map(f => `
         <tr>
-          <td class="strong">${m.periodo}</td>
-          <td class="num strong">${formatearMonto(m.ventas_usd, 'USD')}</td>
-          <td class="num strong">${formatearMonto(m.cobros_usd, 'USD')}</td>
-          <td class="num strong" style="color:${m.variacion_neta_usd >= 0 ? 'var(--amber)' : '#4caf7a'}">${formatearMonto(m.variacion_neta_usd, 'USD')}</td>
-          <td class="num strong">${formatearMonto(m.saldo_abierto_usd, 'USD')}</td>
+          <td class="strong">${f.doc_num ?? f.doc_entry}</td>
+          <td>${f.cliente_code}</td>
+          <td>${f.fecha}</td>
+          <td class="num strong">${formatearMonto(f.venta_usd, 'USD')}</td>
+          <td class="num">${formatearMonto(f.cobrado_usd, 'USD')}</td>
+          <td class="num strong">${formatearMonto(f.saldo_abierto_usd, 'USD')}</td>
+          <td>${badgeEstado(f.estado)}</td>
         </tr>`).join('')
-    : '<tr><td colspan="5" class="empty">Sin datos todavía — correr sync_flujo.py.</td></tr>';
+    : '<tr><td colspan="7" class="empty">Sin facturas emitidas en este mes.</td></tr>';
 }
 
 cargarPeriodos();
 cargarTendencia();
 cargarMetodoDirecto();
-cargarResumenCxC();
+document.getElementById('periodo').addEventListener('change', (e) => cargarCxC(e.target.value));
 </script>
 </body>
 </html>
