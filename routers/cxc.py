@@ -306,6 +306,81 @@ def detalle_periodo(
     }
 
 
+@router.get("/validacion-banco")
+def validacion_banco(
+    periodo: str = Query(..., description="YYYY-MM, obligatorio"),
+    db: Session = Depends(get_db),
+    usuario: dict = Depends(usuario_actual),
+):
+    """
+    Valida la Metrica 1 (Efectivo Cobrado) contra el estado de banco REAL,
+    sin convertir monedas - cada una en la suya, como manda el principio
+    original del proyecto. Solo BHD tiene extractos cargados por ahora
+    (parser_popular.py todavia no existe), asi que la validacion se limita
+    a BHD - si el mes no tiene extracto BHD cargado, se marca como tal en
+    vez de mostrar un cuadre falso.
+    """
+    anio, mes = (int(p) for p in periodo.split("-"))
+    parametros = {"anio": anio, "mes": mes}
+
+    banco = db.execute(
+        text("""
+            SELECT c.moneda,
+                   SUM(m.credito) AS creditos_confirmados,
+                   COUNT(*) AS filas_totales
+            FROM movimientos_banco m
+            JOIN cuentas_bancarias c ON c.id = m.cuenta_id
+            WHERE c.banco_codigo = 'BHD'
+              AND EXTRACT(YEAR FROM m.fecha) = :anio AND EXTRACT(MONTH FROM m.fecha) = :mes
+              AND m.estado_conciliacion = 'confirmado'
+            GROUP BY c.moneda
+        """),
+        parametros,
+    ).mappings().all()
+
+    # Para saber si el mes tiene extracto cargado en absoluto (con o sin
+    # confirmar todavia) - distinto de "cargado pero en cero por conciliar".
+    banco_filas_totales = db.execute(
+        text("""
+            SELECT c.moneda, COUNT(*) AS filas
+            FROM movimientos_banco m
+            JOIN cuentas_bancarias c ON c.id = m.cuenta_id
+            WHERE c.banco_codigo = 'BHD'
+              AND EXTRACT(YEAR FROM m.fecha) = :anio AND EXTRACT(MONTH FROM m.fecha) = :mes
+            GROUP BY c.moneda
+        """),
+        parametros,
+    ).mappings().all()
+
+    cobros_por_moneda = db.execute(
+        text("""
+            SELECT moneda, SUM(monto) AS total
+            FROM cobros
+            WHERE EXTRACT(YEAR FROM fecha) = :anio AND EXTRACT(MONTH FROM fecha) = :mes
+            GROUP BY moneda
+        """),
+        parametros,
+    ).mappings().all()
+
+    banco_map = {b["moneda"]: float(b["creditos_confirmados"] or 0) for b in banco}
+    banco_filas_map = {b["moneda"]: b["filas"] for b in banco_filas_totales}
+    cobros_map = {c["moneda"]: float(c["total"] or 0) for c in cobros_por_moneda}
+
+    resultado = {}
+    for moneda in ("USD", "RD$"):
+        disponible = banco_filas_map.get(moneda, 0) > 0
+        cobros_val = cobros_map.get(moneda, 0.0)
+        banco_val = banco_map.get(moneda, 0.0)
+        resultado[moneda] = {
+            "banco_disponible": disponible,
+            "cobros_usd_o_rd": round(cobros_val, 2),
+            "banco_confirmado": round(banco_val, 2),
+            "diferencia": round(cobros_val - banco_val, 2) if disponible else None,
+        }
+
+    return {"periodo": periodo, "por_moneda": resultado}
+
+
 @router.get("/seguimiento")
 def seguimiento_ventas_vs_cobros(
     periodo: str | None = Query(None, description="YYYY-MM opcional. Sin esto, trae todos los meses disponibles."),
