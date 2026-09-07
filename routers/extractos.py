@@ -1,8 +1,8 @@
 """
 routers/extractos.py
-Subida de estados de cuenta (PDF). Por ahora solo soporta el formato BHD -
-parser_popular.py todavia no esta escrito, asi que un PDF de Popular
-va a fallar con un mensaje claro en vez de un error confuso.
+Subida de estados de cuenta (PDF). Soporta BHD y Popular - intenta BHD
+primero (formato mas facil de detectar por su encabezado con totales
+declarados), y si falla, intenta Popular antes de reportar error.
 """
 
 import os
@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from parser_bhd import ErrorParseoBHD, parse_bhd_statement
+from parser_popular import ErrorParseoPopular, parse_popular_statement
 from reglas_conciliacion import clasificar_estado_inicial, ejecutar_sugerencias
 from routers.auth import requiere_rol
 
@@ -35,14 +36,26 @@ async def subir_extracto(
         ruta_temp = tmp.name
 
     try:
+        datos = None
+        errores = []
+
         try:
             datos = parse_bhd_statement(ruta_temp)
         except ErrorParseoBHD as e:
+            errores.append(f"BHD: {e}")
+
+        if datos is None:
+            try:
+                datos = parse_popular_statement(ruta_temp)
+            except ErrorParseoPopular as e:
+                errores.append(f"Popular: {e}")
+
+        if datos is None:
             raise HTTPException(
                 status_code=422,
                 detail=(
-                    f"No se pudo leer '{archivo.filename}' como extracto BHD ({e}). "
-                    "Si es un extracto de Popular, ese formato todavia no esta soportado."
+                    f"No se pudo leer '{archivo.filename}' como extracto BHD ni Popular. "
+                    + " | ".join(errores)
                 ),
             )
 
@@ -99,7 +112,7 @@ async def subir_extracto(
 
         return {
             "cuenta": datos["numero_cuenta"],
-            "moneda": datos["moneda"],
+            "moneda": cuenta["moneda"],
             "periodo_inicio": str(datos["periodo_inicio"]),
             "periodo_fin": str(datos["periodo_fin"]),
             "movimientos_nuevos": nuevos,

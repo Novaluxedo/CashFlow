@@ -2,8 +2,8 @@
 seed_y_cargar.py
 Script de UNA SOLA VEZ (o cuantas veces quieras, es seguro repetirlo):
 1. Crea las 4 cuentas bancarias conocidas si todavia no existen.
-2. Recorre una carpeta local y carga todos los PDF de BHD que encuentre.
-   (Los de Popular se saltan con un aviso claro - ese parser aun no existe.)
+2. Recorre una carpeta local y carga todos los PDF que encuentre,
+   intentando el parser de BHD y el de Popular en cada archivo.
 3. Corre las reglas de sugerencia automatica al final.
 
 Uso:
@@ -23,6 +23,7 @@ from sqlalchemy import text
 
 from db import SessionLocal
 from parser_bhd import ErrorParseoBHD, parse_bhd_statement
+from parser_popular import ErrorParseoPopular, parse_popular_statement
 from reglas_conciliacion import clasificar_estado_inicial, ejecutar_sugerencias
 
 # Las 4 cuentas que ya identificamos en los extractos reales.
@@ -64,16 +65,21 @@ def obtener_cuenta_id(db, numero_cuenta):
     return fila[0] if fila else None
 
 
-def cargar_pdf_bhd(db, ruta_pdf):
+def cargar_pdf(db, ruta_pdf):
     nombre = os.path.basename(ruta_pdf)
+
+    datos = None
     try:
         datos = parse_bhd_statement(ruta_pdf)
-    except ErrorParseoBHD as e:
-        print(f"  [SALTADO] {nombre}: no es un extracto BHD valido, o los totales no cuadran ({e})")
-        return 0, 0
-    except Exception as e:
-        print(f"  [SALTADO] {nombre}: {e} (probablemente es un extracto de Popular, aun no soportado)")
-        return 0, 0
+    except ErrorParseoBHD:
+        pass
+
+    if datos is None:
+        try:
+            datos = parse_popular_statement(ruta_pdf)
+        except ErrorParseoPopular as e:
+            print(f"  [SALTADO] {nombre}: no es un extracto BHD ni Popular valido ({e})")
+            return 0, 0
 
     cuenta_id = obtener_cuenta_id(db, datos["numero_cuenta"])
     if not cuenta_id:
@@ -143,7 +149,7 @@ def main():
         total_nuevos = 0
         total_duplicados = 0
         for ruta in pdfs:
-            n, d = cargar_pdf_bhd(db, ruta)
+            n, d = cargar_pdf(db, ruta)
             total_nuevos += n
             total_duplicados += d
 
